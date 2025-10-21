@@ -857,6 +857,4 @@ Future enhancements planned:
 
 ---
 
-**Built with ❤️ for financial analysis and AI-powered insights**
-
-Last Updated: 2024-10-21
+**Built with ❤️ in the SF Bay Area**

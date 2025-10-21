@@ -30,7 +30,14 @@ class ThreadSafeChartGenerator:
     
     @staticmethod
     def create_price_chart(df: pd.DataFrame, ticker: str, output_path: str) -> None:
-        """Create comprehensive price chart with technical indicators."""
+        """
+        Creates a comprehensive price chart with technical indicators.
+
+        Args:
+            df (pd.DataFrame): The DataFrame containing the price history.
+            ticker (str): The ticker symbol.
+            output_path (str): The path to save the chart to.
+        """
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=PRICE_CHART_SIZE,
                                         gridspec_kw={'height_ratios': PRICE_CHART_HEIGHT_RATIOS})
         
@@ -81,7 +88,13 @@ class ThreadSafeChartGenerator:
     
     @staticmethod
     def create_comparison_chart(analyses: Dict[str, TickerAnalysis], output_path: str) -> None:
-        """Create normalized comparison chart."""
+        """
+        Creates a normalized comparison chart of multiple tickers.
+
+        Args:
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
+            output_path (str): The path to save the chart to.
+        """
         fig, ax = plt.subplots(figsize=COMPARISON_CHART_SIZE)
 
         try:
@@ -134,7 +147,13 @@ class ThreadSafeChartGenerator:
     
     @staticmethod
     def create_risk_reward_chart(analyses: Dict[str, TickerAnalysis], output_path: str) -> None:
-        """Create risk-reward scatter plot."""
+        """
+        Creates a risk-reward scatter plot of multiple tickers.
+
+        Args:
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
+            output_path (str): The path to save the chart to.
+        """
         fig, ax = plt.subplots(figsize=RISK_REWARD_CHART_SIZE)
 
         try:

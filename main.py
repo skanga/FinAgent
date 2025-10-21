@@ -24,10 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 def setup_cli() -> argparse.ArgumentParser:
-    """Setup CLI argument parser."""
+    """
+    Sets up the command-line interface for the financial reporting agent.
+
+    Returns:
+        argparse.ArgumentParser: The argument parser.
+    """
     parser = argparse.ArgumentParser(
         description='Advanced Financial Report Generator with AI',
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="%(prog)s [options]",
+        add_help=True,
         epilog="""
 Examples:
   # Natural language request
@@ -93,7 +100,15 @@ Examples:
 
 
 def validate_tickers(tickers: List[str]) -> None:
-    """Validate ticker symbols before processing."""
+    """
+    Validates a list of ticker symbols.
+
+    Args:
+        tickers (List[str]): The list of ticker symbols to validate.
+
+    Raises:
+        ValueError: If the list of tickers is invalid.
+    """
     if not tickers:
         raise ValueError("At least one ticker symbol is required")
 
@@ -122,13 +137,14 @@ def validate_tickers(tickers: List[str]) -> None:
 
 
 def validate_period(period: str) -> None:
-    """Validate that the period is supported by yfinance.
+    """
+    Validates that the period is a supported yfinance period.
 
     Args:
-        period: Time period string (e.g., "1y", "6mo", "ytd")
+        period (str): The period to validate.
 
     Raises:
-        ValueError: If period is not in VALID_PERIODS
+        ValueError: If the period is invalid.
     """
     if period not in VALID_PERIODS:
         raise ValueError(
@@ -137,17 +153,18 @@ def validate_period(period: str) -> None:
 
 
 def parse_weights(weights_str: Optional[str], tickers: List[str]) -> Optional[dict]:
-    """Parse portfolio weights string.
+    """
+    Parses a string of comma-separated portfolio weights.
 
     Args:
-        weights_str: Comma-separated weights (e.g., "0.5,0.3,0.2")
-        tickers: List of ticker symbols
+        weights_str (Optional[str]): The string of weights to parse.
+        tickers (List[str]): The list of tickers.
 
     Returns:
-        Dictionary mapping tickers to weights, or None if no weights provided
+        Optional[dict]: A dictionary of tickers and weights, or None if no weights are provided.
 
     Raises:
-        ValueError: If weights are invalid (negative, sum != 1.0, wrong count, etc.)
+        ValueError: If the weights are invalid.
     """
     if not weights_str:
         return None

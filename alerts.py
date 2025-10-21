@@ -22,11 +22,26 @@ class AlertSystem:
     def __init__(self,
                  volatility_threshold: float = VOLATILITY_ALERT_THRESHOLD,
                  drawdown_threshold: float = DRAWDOWN_ALERT_THRESHOLD) -> None:
+        """
+        Initializes the AlertSystem with given thresholds.
+
+        Args:
+            volatility_threshold (float): The threshold for volatility alerts.
+            drawdown_threshold (float): The threshold for drawdown alerts.
+        """
         self.volatility_threshold = volatility_threshold
         self.drawdown_threshold = drawdown_threshold
     
     def check_alerts(self, analysis: TickerAnalysis) -> List[str]:
-        """Check for alert conditions."""
+        """
+        Checks for alert conditions based on the provided ticker analysis.
+
+        Args:
+            analysis (TickerAnalysis): The ticker analysis to check for alerts.
+
+        Returns:
+            List[str]: A list of alerts.
+        """
         alerts = []
         
         # Volatility alerts

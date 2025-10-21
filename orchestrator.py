@@ -25,6 +25,12 @@ class FinancialReportOrchestrator:
     """Main orchestrator with all features integrated."""
 
     def __init__(self, config: Config) -> None:
+        """
+        Initializes the FinancialReportOrchestrator with a configuration object.
+
+        Args:
+            config (Config): The configuration object.
+        """
         self.config = config
         self.cache = CacheManager(cache_dir="./.cache", ttl_hours=config.cache_ttl_hours)
         self.fetcher = CachedDataFetcher(self.cache, timeout=config.request_timeout)
@@ -61,7 +67,18 @@ class FinancialReportOrchestrator:
     
     def analyze_ticker(self, ticker: str, period: str, output_dir: Path,
                       benchmark_returns: Optional[pd.Series] = None) -> TickerAnalysis:
-        """Comprehensive ticker analysis with fundamentals."""
+        """
+        Performs a comprehensive analysis of a single ticker.
+
+        Args:
+            ticker (str): The ticker symbol to analyze.
+            period (str): The analysis period.
+            output_dir (Path): The directory to save the output files to.
+            benchmark_returns (Optional[pd.Series]): The benchmark returns for comparison.
+
+        Returns:
+            TickerAnalysis: An object containing the analysis results.
+        """
         logger.info(f"Analyzing {ticker}")
         
         try:
@@ -147,7 +164,16 @@ class FinancialReportOrchestrator:
     
     def run_from_natural_language(self, user_request: str,
                                   output_dir: str = "./reports") -> ReportMetadata:
-        """ Support natural language requests."""
+        """
+        Runs the financial report generation from a natural language request.
+
+        Args:
+            user_request (str): The natural language request from the user.
+            output_dir (str): The directory to save the output files to.
+
+        Returns:
+            ReportMetadata: An object containing the report metadata.
+        """
         try:
             parsed = self.llm.parse_natural_language_request(user_request)
             return self.run(parsed.tickers, parsed.period, output_dir)
@@ -384,13 +410,16 @@ class FinancialReportOrchestrator:
     def run(self, tickers: List[str], period: str, output_dir: str = "./reports",
             portfolio_weights: Optional[Dict[str, float]] = None) -> ReportMetadata:
         """
-        Main execution with all features.
+        Runs the financial report generation.
 
         Args:
-            tickers: List of ticker symbols
-            period: Analysis period
-            output_dir: Output directory
-            portfolio_weights: Optional portfolio weights
+            tickers (List[str]): A list of ticker symbols to analyze.
+            period (str): The analysis period.
+            output_dir (str): The directory to save the output files to.
+            portfolio_weights (Optional[Dict[str, float]]): The portfolio weights.
+
+        Returns:
+            ReportMetadata: An object containing the report metadata.
         """
         start_time = time.time()
 

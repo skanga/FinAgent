@@ -8,7 +8,14 @@ from collections import defaultdict
 
 
 class ImportChecker(ast.NodeVisitor):
-    """Check for unused imports in a Python file."""
+    """
+    An AST visitor that checks for unused imports in a Python file.
+
+    Attributes:
+        filename (str): The name of the file being checked.
+        imports (dict): A dictionary of imported names and their corresponding modules and line numbers.
+        used_names (set): A set of names that are used in the file.
+    """
 
     def __init__(self, filename):
         self.filename = filename
@@ -78,7 +85,15 @@ class ImportChecker(ast.NodeVisitor):
 
 
 def check_file(filepath):
-    """Check a single file for unused imports."""
+    """
+    Checks a single Python file for unused imports.
+
+    Args:
+        filepath (str): The path to the Python file to check.
+
+    Returns:
+        list: A list of unused imports, where each item is a tuple of (name, module, lineno).
+    """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()

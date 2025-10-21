@@ -8,6 +8,13 @@ from requests import Session
 from cache import CacheManager
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +24,14 @@ class CachedDataFetcher:
 
     def __init__(self, cache_manager: CacheManager, timeout: int = 30,
                  pool_connections: int = 10, pool_maxsize: int = 10) -> None:
-        """Initialize fetcher with caching.
-
-        Note: yfinance (v0.2.28+) uses curl_cffi internally which manages its own
-        connection pooling. Custom requests.Session is no longer supported.
+        """
+        Initializes the CachedDataFetcher with a cache manager and connection pooling settings.
 
         Args:
-            cache_manager: Cache manager instance
-            timeout: Request timeout in seconds
-            pool_connections: Number of connection pools (reserved for future use)
-            pool_maxsize: Maximum connections per pool (reserved for future use)
+            cache_manager (CacheManager): The cache manager to use.
+            timeout (int): The request timeout in seconds.
+            pool_connections (int): The number of connection pools.
+            pool_maxsize (int): The maximum number of connections per pool.
         """
         self.cache = cache_manager
         self.timeout = timeout
@@ -76,12 +81,30 @@ class CachedDataFetcher:
         logger.info(f"Created HTTP session with connection pool (size: {pool_maxsize})")
         return session
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((OSError, ConnectionError, TimeoutError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )
     def fetch_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
-        """Fetch price history with caching.
+        """
+        Fetches the price history for a given ticker, using the cache if available.
 
-        Note: yfinance now uses curl_cffi internally for rate limiting bypass,
-        which doesn't support custom requests.Session. We let yfinance manage
-        its own connection pooling.
+        Automatically retries up to 3 times with exponential backoff (1s, 2s, 4s)
+        for transient network errors (OSError, ConnectionError, TimeoutError).
+
+        Args:
+            ticker (str): The ticker symbol to fetch.
+            period (str): The period to fetch the history for.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the price history.
+
+        Raises:
+            ValueError: If ticker is invalid or has insufficient data
+            OSError: If network errors persist after retries
         """
         ticker = ticker.strip().upper()
 
@@ -114,16 +137,27 @@ class CachedDataFetcher:
 
         except ValueError:
             # Re-raise ValueError as-is (our own validation errors)
+            # Don't retry for invalid tickers or data issues
             raise
-        except (KeyError, AttributeError, TypeError, OSError) as e:
-            # Handle yfinance API errors, network issues, data parsing errors
+        except OSError:
+            # Re-raise OSError to trigger retry
+            logger.error(f"Network error fetching {ticker}")
+            raise
+        except (KeyError, AttributeError, TypeError) as e:
+            # Handle yfinance API errors and data parsing errors
+            # These don't trigger retry
             logger.error(f"Failed to fetch {ticker}: {e}")
             raise ValueError(f"Failed to fetch {ticker}: {str(e)}") from e
     
     def validate_ticker_exists(self, ticker: str) -> bool:
-        """Quick validation to check if ticker exists.
+        """
+        Validates that a ticker exists by checking for its info.
 
-        Note: Uses yfinance's default session (curl_cffi).
+        Args:
+            ticker (str): The ticker symbol to validate.
+
+        Returns:
+            bool: True if the ticker exists, False otherwise.
         """
         try:
             t = yf.Ticker(ticker)

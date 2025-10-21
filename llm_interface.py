@@ -10,6 +10,13 @@ from langchain_openai import ChatOpenAI
 from typing import Dict, List, Tuple, Optional
 from langchain_core.prompts import PromptTemplate
 from models import ParsedRequest, TickerAnalysis, PortfolioMetrics
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +27,13 @@ class IntegratedLLMInterface:
     def __init__(self, config: Config,
                  max_connections: int = 20,
                  max_keepalive_connections: int = 10) -> None:
-        """Initialize LLM interface with connection pooling.
+        """
+        Initializes the IntegratedLLMInterface with a configuration object and connection pooling settings.
 
         Args:
-            config: Configuration object
-            max_connections: Maximum number of concurrent connections
-            max_keepalive_connections: Maximum idle connections to keep alive
+            config (Config): The configuration object.
+            max_connections (int): The maximum number of concurrent connections.
+            max_keepalive_connections (int): The maximum number of idle connections to keep alive.
         """
         self.config = config
 
@@ -224,48 +232,82 @@ Return ONLY the JSON."""
         self.narrative_chain = self.narrative_prompt | self.llm
         self.review_chain = self.review_prompt | self.llm
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )
     def parse_natural_language_request(self, user_request: str) -> ParsedRequest:
-        """Parse natural language requests."""
-        logger.info("Parsing natural language request")
-        
-        for attempt in range(self.config.max_retries):
-            try:
-                response = self.parser_chain.invoke({"user_request": user_request})
-                parsed_text = response.content.strip()
-                
-                # Clean markdown code blocks
-                if "```json" in parsed_text:
-                    parsed_text = parsed_text.split("```json")[1].split("```")[0]
-                elif "```" in parsed_text:
-                    parsed_text = parsed_text.split("```")[1].split("```")[0]
-                
-                parsed_json = json.loads(parsed_text)
-                
-                parsed = ParsedRequest(
-                    tickers=[t.upper().strip() for t in parsed_json.get("tickers", [])],
-                    period=parsed_json.get("period", "1y"),
-                    metrics=parsed_json.get("metrics", []),
-                    output_format=parsed_json.get("output_format", "markdown")
-                )
-                
-                parsed.validate()
-                logger.info(f"Parsed request: {parsed.tickers}")
-                return parsed
-                
-            except json.JSONDecodeError as e:
-                logger.warning(f"JSON parse failed (attempt {attempt + 1}): {e}")
-                if attempt == self.config.max_retries - 1:
-                    raise ValueError(f"Failed to parse after {self.config.max_retries} attempts") from e
-            except (KeyError, ValueError, TypeError, AttributeError) as e:
-                logger.error(f"Parse error (attempt {attempt + 1}): {e}")
-                if attempt == self.config.max_retries - 1:
-                    raise ValueError(f"Parse error: {str(e)}") from e
+        """
+        Parses a natural language request into a structured format.
 
-        raise ValueError("Failed to parse request")
-    
-    def generate_narrative_summary(self, analyses: Dict[str, TickerAnalysis], 
+        Automatically retries up to 3 times with exponential backoff for network errors.
+
+        Args:
+            user_request (str): The natural language request from the user.
+
+        Returns:
+            ParsedRequest: A structured request object.
+
+        Raises:
+            ValueError: If parsing fails after retries
+            ConnectionError: If network errors persist after retries
+        """
+        logger.info("Parsing natural language request")
+
+        try:
+            response = self.parser_chain.invoke({"user_request": user_request})
+            parsed_text = response.content.strip()
+
+            # Clean markdown code blocks
+            if "```json" in parsed_text:
+                parsed_text = parsed_text.split("```json")[1].split("```")[0]
+            elif "```" in parsed_text:
+                parsed_text = parsed_text.split("```")[1].split("```")[0]
+
+            parsed_json = json.loads(parsed_text)
+
+            parsed = ParsedRequest(
+                tickers=[t.upper().strip() for t in parsed_json.get("tickers", [])],
+                period=parsed_json.get("period", "1y"),
+                metrics=parsed_json.get("metrics", []),
+                output_format=parsed_json.get("output_format", "markdown")
+            )
+
+            parsed.validate()
+            logger.info(f"Parsed request: {parsed.tickers}")
+            return parsed
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse failed: {e}")
+            raise ValueError(f"Failed to parse JSON response") from e
+        except (KeyError, ValueError, TypeError, AttributeError) as e:
+            logger.error(f"Parse error: {e}")
+            raise ValueError(f"Parse error: {str(e)}") from e
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )
+    def generate_narrative_summary(self, analyses: Dict[str, TickerAnalysis],
                                    period: str) -> str:
-        """Generate LLM-powered narrative summary."""
+        """
+        Generates a narrative summary of the financial analysis using the LLM.
+
+        Automatically retries up to 3 times with exponential backoff for network errors.
+
+        Args:
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
+            period (str): The analysis period.
+
+        Returns:
+            str: The narrative summary.
+        """
         logger.info("Generating narrative summary with LLM")
         
         # Prepare concise data for LLM with clear labels
@@ -307,17 +349,31 @@ Return ONLY the JSON."""
         best = max(successful.items(), key=lambda x: x[1].avg_daily_return)
         worst = min(successful.items(), key=lambda x: x[1].avg_daily_return)
         
-        return f"""Over the {period} period, {len(successful)} stocks were analyzed. 
-{best[0]} showed the strongest performance with a {best[1].avg_daily_return*100:.2f}% average daily return, 
-while {worst[0]} had the weakest returns at {worst[1].avg_daily_return*100:.2f}%. 
+        return f"""Over the {period} period, {len(successful)} stocks were analyzed.
+{best[0]} showed the strongest performance with a {best[1].avg_daily_return*100:.2f}% average daily return,
+while {worst[0]} had the weakest returns at {worst[1].avg_daily_return*100:.2f}%.
 Risk metrics varied across the portfolio, with several stocks showing elevated volatility warranting monitoring."""
-    
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True
+    )
     def review_report(self, report_content: str,
                      analyses: Dict[str, TickerAnalysis]) -> Tuple[List[str], int, Dict]:
-        """Actually review report using LLM.
+        """
+        Reviews a financial report for accuracy and quality using the LLM.
+
+        Automatically retries up to 3 times with exponential backoff for network errors.
+
+        Args:
+            report_content (str): The content of the report to review.
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
 
         Returns:
-            Tuple of (issues_list, quality_score, full_review_dict)
+            Tuple[List[str], int, Dict]: A tuple containing a list of issues, a quality score, and the full review dictionary.
         """
         logger.info("Reviewing report with LLM")
 
@@ -458,16 +514,17 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
                                 benchmark_analysis: Optional[TickerAnalysis],
                                 portfolio_metrics: Optional[PortfolioMetrics],
                                 period: str) -> str:
-        """Generate comprehensive report with LLM narrative.
+        """
+        Generates a comprehensive financial report with an LLM-powered narrative.
 
         Args:
-            analyses: All analysis results
-            benchmark_analysis: Benchmark analysis
-            portfolio_metrics: Portfolio metrics
-            period: Analysis period
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
+            benchmark_analysis (Optional[TickerAnalysis]): The benchmark analysis.
+            portfolio_metrics (Optional[PortfolioMetrics]): The portfolio metrics.
+            period (str): The analysis period.
 
         Returns:
-            Complete markdown report
+            str: The complete markdown report.
         """
         report = []
 

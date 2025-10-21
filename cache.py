@@ -15,6 +15,13 @@ class CacheManager:
     """Intelligent caching for API responses with TTL."""
 
     def __init__(self, cache_dir: str = "./.cache", ttl_hours: int = 24) -> None:
+        """
+        Initializes the CacheManager with a cache directory and a time-to-live (TTL).
+
+        Args:
+            cache_dir (str): The directory to store the cache files in.
+            ttl_hours (int): The time-to-live for cache files in hours.
+        """
         # Resolve and validate cache directory path
         self.cache_dir = Path(cache_dir).resolve()
 
@@ -65,7 +72,17 @@ class CacheManager:
         return cache_path
     
     def get(self, ticker: str, period: str, data_type: str = "prices") -> Optional[Any]:
-        """Retrieve cached data if valid."""
+        """
+        Retrieves data from the cache if it exists and is not expired.
+
+        Args:
+            ticker (str): The ticker symbol.
+            period (str): The time period for the data.
+            data_type (str): The type of data to retrieve.
+
+        Returns:
+            Optional[Any]: The cached data, or None if it doesn't exist or is expired.
+        """
         cache_key = self._get_cache_key(ticker, period, data_type)
         cache_path = self._get_cache_path(cache_key)
 
@@ -93,7 +110,15 @@ class CacheManager:
             return None
     
     def set(self, ticker: str, period: str, data: Any, data_type: str = "prices") -> None:
-        """Store data in cache."""
+        """
+        Stores data in the cache.
+
+        Args:
+            ticker (str): The ticker symbol.
+            period (str): The time period for the data.
+            data (Any): The data to store.
+            data_type (str): The type of data to store.
+        """
         cache_key = self._get_cache_key(ticker, period, data_type)
         cache_path = self._get_cache_path(cache_key)
 
@@ -110,7 +135,12 @@ class CacheManager:
             logger.warning(f"Cache write failed for {ticker}: {e}")
     
     def clear_expired(self) -> int:
-        """Clear expired cache entries."""
+        """
+        Clears all expired cache entries.
+
+        Returns:
+            int: The number of cleared entries.
+        """
         cleared = 0
         for cache_file in self.cache_dir.glob("*.parquet"):
             try:

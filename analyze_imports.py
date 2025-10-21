@@ -7,7 +7,15 @@ from collections import defaultdict
 
 
 def analyze_imports(filepath):
-    """Analyze imports in a file."""
+    """
+    Analyzes the imports in a Python file and categorizes them into standard library, third-party, and local imports.
+
+    Args:
+        filepath (str): The path to the Python file to analyze.
+
+    Returns:
+        dict: A dictionary containing the categorized imports.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
@@ -61,7 +69,15 @@ def analyze_imports(filepath):
 
 
 def check_import_order(filepath):
-    """Check if imports follow PEP 8 order."""
+    """
+    Checks if the imports in a Python file follow the PEP 8 import order.
+
+    Args:
+        filepath (str): The path to the Python file to check.
+
+    Returns:
+        tuple: A tuple containing a boolean indicating whether the import order is correct and a list of issues.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 

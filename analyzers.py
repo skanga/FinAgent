@@ -36,11 +36,26 @@ class AdvancedFinancialAnalyzer:
     """Comprehensive financial analysis with fundamentals parsing."""
     
     def __init__(self, risk_free_rate: float = 0.02, benchmark_ticker: str = "SPY") -> None:
+        """
+        Initializes the AdvancedFinancialAnalyzer with a risk-free rate and a benchmark ticker.
+
+        Args:
+            risk_free_rate (float): The risk-free rate to use in calculations.
+            benchmark_ticker (str): The ticker of the benchmark to use for comparison.
+        """
         self.risk_free_rate = risk_free_rate
         self.benchmark_ticker = benchmark_ticker
     
     def compute_metrics(self, df_prices: pd.DataFrame) -> pd.DataFrame:
-        """Compute technical metrics with optimized vectorized operations."""
+        """
+        Computes technical metrics for a given DataFrame of prices.
+
+        Args:
+            df_prices (pd.DataFrame): A DataFrame containing the price history of a ticker.
+
+        Returns:
+            pd.DataFrame: The DataFrame with the computed metrics.
+        """
         df = df_prices.copy()
         df['Date'] = pd.to_datetime(df['Date'], utc=True)
         df = df.sort_values('Date').reset_index(drop=True)
@@ -109,7 +124,16 @@ class AdvancedFinancialAnalyzer:
     
     def calculate_advanced_metrics(self, returns: pd.Series,
                                    benchmark_returns: Optional[pd.Series] = None) -> AdvancedMetrics:
-        """Calculate comprehensive risk metrics."""
+        """
+        Calculates advanced financial metrics for a given series of returns.
+
+        Args:
+            returns (pd.Series): A series of returns.
+            benchmark_returns (Optional[pd.Series]): A series of benchmark returns.
+
+        Returns:
+            AdvancedMetrics: An object containing the advanced metrics.
+        """
         if len(returns) < MIN_DATA_POINTS_BASIC:
             return AdvancedMetrics()
 
@@ -202,7 +226,15 @@ class AdvancedFinancialAnalyzer:
         return beta, alpha, r_squared, treynor, information_ratio
     
     def compute_ratios(self, ticker: str) -> Dict[str, Optional[float]]:
-        """Compute financial ratios using yfinance info."""
+        """
+        Computes financial ratios for a given ticker using yfinance.
+
+        Args:
+            ticker (str): The ticker to compute the ratios for.
+
+        Returns:
+            Dict[str, Optional[float]]: A dictionary of financial ratios.
+        """
         ratios = {
             'pe_ratio': None, 'forward_pe': None, 'peg_ratio': None,
             'price_to_sales': None, 'price_to_book': None, 'debt_to_equity': None,
@@ -241,7 +273,15 @@ class AdvancedFinancialAnalyzer:
         return ratios
     
     def parse_fundamentals(self, ticker: str) -> FundamentalData:
-        """Parse and use financial statements."""
+        """
+        Parses fundamental financial data for a given ticker.
+
+        Args:
+            ticker (str): The ticker to parse the fundamentals for.
+
+        Returns:
+            FundamentalData: An object containing the fundamental data.
+        """
         fundamentals = FundamentalData()
         
         try:
@@ -289,7 +329,16 @@ class AdvancedFinancialAnalyzer:
         return fundamentals
     
     def _safe_get_value(self, series: pd.Series, key: str) -> Optional[float]:
-        """Safely extract value from pandas Series."""
+        """
+        Safely extracts a float value from a pandas Series by key.
+
+        Args:
+            series (pd.Series): The pandas Series to extract the value from.
+            key (str): The key of the value to extract.
+
+        Returns:
+            Optional[float]: The extracted value as a float, or None if the key is not found or the value is not a valid number.
+        """
         try:
             if key in series.index:
                 value = series[key]
@@ -333,11 +382,26 @@ class PortfolioAnalyzer:
     """Portfolio-level metrics computation."""
 
     def __init__(self, risk_free_rate: float = 0.02) -> None:
+        """
+        Initializes the PortfolioAnalyzer with a risk-free rate.
+
+        Args:
+            risk_free_rate (float): The risk-free rate to use in calculations.
+        """
         self.risk_free_rate = risk_free_rate
     
     def calculate_portfolio_metrics(self, analyses: Dict[str, TickerAnalysis], 
                                     weights: Optional[Dict[str, float]] = None) -> PortfolioMetrics:
-        """Calculate comprehensive portfolio-level metrics."""
+        """
+        Calculates portfolio-level metrics based on a dictionary of ticker analyses and weights.
+
+        Args:
+            analyses (Dict[str, TickerAnalysis]): A dictionary of ticker analyses.
+            weights (Optional[Dict[str, float]]): A dictionary of weights for each ticker.
+
+        Returns:
+            PortfolioMetrics: An object containing the portfolio metrics.
+        """
         successful = {t: a for t, a in analyses.items() if not a.error}
         
         if not successful:

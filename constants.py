@@ -190,10 +190,10 @@ MAX_QUALITY_SCORE = 10  # Maximum quality score
 
 def validate_constants() -> None:
     """
-    Validate that all constants are within reasonable ranges.
+    Validates that all constants are within reasonable ranges.
 
     Raises:
-        ValueError: If any constant is invalid
+        ValueError: If any constant is invalid.
     """
     # RSI thresholds
     if not (0 < RSI_OVERBOUGHT_THRESHOLD <= 100):
@@ -234,10 +234,10 @@ validate_constants()
 
 def get_all_constants() -> dict:
     """
-    Get a dictionary of all constants with their values.
+    Gets a dictionary of all constants with their values.
 
     Returns:
-        dict: Dictionary of constant names and values
+        dict: A dictionary of constant names and values.
     """
     return {
         name: value
@@ -247,7 +247,9 @@ def get_all_constants() -> dict:
 
 
 def print_constants() -> None:
-    """Print all constants in a readable format."""
+    """
+    Prints all constants in a readable format.
+    """
     constants = get_all_constants()
 
     print("=" * 60)

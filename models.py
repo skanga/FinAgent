@@ -28,7 +28,15 @@ class TickerRequest(BaseModel):
     @field_validator('ticker')
     @classmethod
     def validate_ticker(cls, v: str) -> str:
-        """Validate ticker format."""
+        """
+        Validates the ticker symbol.
+
+        Args:
+            v (str): The ticker symbol to validate.
+
+        Returns:
+            str: The validated ticker symbol.
+        """
         # Convert to uppercase
         v = v.strip().upper()
 
@@ -45,7 +53,15 @@ class TickerRequest(BaseModel):
     @field_validator('period')
     @classmethod
     def validate_period(cls, v: str) -> str:
-        """Validate period is a valid yfinance period."""
+        """
+        Validates the analysis period.
+
+        Args:
+            v (str): The analysis period to validate.
+
+        Returns:
+            str: The validated analysis period.
+        """
         if v not in VALID_PERIODS:
             raise ValueError(
                 f"Invalid period '{v}'. Must be one of: {', '.join(VALID_PERIODS)}"
@@ -74,7 +90,15 @@ class PortfolioRequest(BaseModel):
     @field_validator('tickers')
     @classmethod
     def validate_tickers(cls, v: List[str]) -> List[str]:
-        """Validate all tickers."""
+        """
+        Validates the list of ticker symbols.
+
+        Args:
+            v (List[str]): The list of ticker symbols to validate.
+
+        Returns:
+            List[str]: The validated list of ticker symbols.
+        """
         validated = []
         for ticker in v:
             # Use the same validation as TickerRequest
@@ -96,7 +120,15 @@ class PortfolioRequest(BaseModel):
     @field_validator('period')
     @classmethod
     def validate_period(cls, v: str) -> str:
-        """Validate period."""
+        """
+        Validates the analysis period.
+
+        Args:
+            v (str): The analysis period to validate.
+
+        Returns:
+            str: The validated analysis period.
+        """
         if v not in VALID_PERIODS:
             raise ValueError(
                 f"Invalid period '{v}'. Must be one of: {', '.join(VALID_PERIODS)}"
@@ -105,7 +137,12 @@ class PortfolioRequest(BaseModel):
 
     @model_validator(mode='after')
     def validate_weights(self) -> 'PortfolioRequest':
-        """Validate portfolio weights if provided."""
+        """
+        Validates the portfolio weights.
+
+        Returns:
+            PortfolioRequest: The validated portfolio request.
+        """
         if self.weights is None:
             return self
 
@@ -158,7 +195,15 @@ class NaturalLanguageRequest(BaseModel):
     @field_validator('query')
     @classmethod
     def validate_query(cls, v: str) -> str:
-        """Validate query is not empty or just whitespace."""
+        """
+        Validates the natural language query.
+
+        Args:
+            v (str): The natural language query to validate.
+
+        Returns:
+            str: The validated natural language query.
+        """
         v = v.strip()
         if not v:
             raise ValueError("Query cannot be empty")
@@ -268,7 +313,12 @@ class ParsedRequest:
     output_format: str = "markdown"
     
     def validate(self) -> None:
-        """Validate parsed request."""
+        """
+        Validates the parsed request.
+
+        Raises:
+            ValueError: If the parsed request is invalid.
+        """
         if not self.tickers:
             raise ValueError("At least one ticker must be specified")
         if len(self.tickers) > MAX_TICKERS_ALLOWED:

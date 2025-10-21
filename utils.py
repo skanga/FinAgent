@@ -11,13 +11,26 @@ class ProgressTracker:
     """Track and display progress for long-running operations."""
     
     def __init__(self, total: int, description: str = "Processing") -> None:
+        """
+        Initializes the ProgressTracker.
+
+        Args:
+            total (int): The total number of items to track.
+            description (str): A description of the operation being tracked.
+        """
         self.total = total
         self.current = 0
         self.description = description
         self.start_time = time.time()
 
     def update(self, item: str, success: bool = True) -> None:
-        """Update progress."""
+        """
+        Updates the progress.
+
+        Args:
+            item (str): The item being processed.
+            success (bool): Whether the operation was successful.
+        """
         self.current += 1
         elapsed = time.time() - self.start_time
         rate = self.current / elapsed if elapsed > 0 else 0
@@ -28,13 +41,23 @@ class ProgressTracker:
               f"Elapsed: {elapsed:.1f}s | ETA: {eta:.1f}s", flush=True)
 
     def complete(self) -> None:
-        """Mark as complete."""
+        """
+        Marks the progress as complete.
+        """
         elapsed = time.time() - self.start_time
         print(f"✓ {self.description} complete in {elapsed:.1f}s")
 
 
 def normalize_period(user_period: str) -> str:
-    """Convert natural language time periods to yfinance periods."""
+    """
+    Normalizes a user-provided time period to a yfinance-compatible period.
+
+    Args:
+        user_period (str): The user-provided time period.
+
+    Returns:
+        str: The normalized time period.
+    """
     if not user_period:
         return "1y"
     

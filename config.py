@@ -113,7 +113,12 @@ class Config:
 
     @classmethod
     def from_env(cls) -> 'Config':
-        """Load configuration from environment variables."""
+        """
+        Loads the configuration from environment variables.
+
+        Returns:
+            Config: The configuration object.
+        """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable must be set")

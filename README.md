@@ -50,7 +50,7 @@ Get up and running in 3 minutes:
 
 ```bash
 # 1. Clone the repository
-git clone <repository-url>
+git clone https://github.com/skanga/FinAgent
 cd financial_reporting_agent
 
 # 2. Install dependencies
@@ -857,6 +857,4 @@ Future enhancements planned:
 
 ---
 
-**Built with ❤️ for financial analysis and AI-powered insights**
-
-Last Updated: 2024-10-21
+**Built with ❤️ in the SF Bay Area**

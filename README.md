@@ -842,6 +842,7 @@ SOFTWARE.
 
 Future enhancements planned:
 
+- [ ] Additional Data Sources (not only yfinance)
 - [ ] Real-time data streaming
 - [ ] Advanced portfolio optimization (Markowitz, Black-Litterman)
 - [ ] Sector and industry analysis

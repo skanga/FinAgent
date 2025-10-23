@@ -42,6 +42,20 @@
 - [Contributing](#-contributing)
 - [License](#-license)
 
+## 📚 Additional Documentation
+
+> **[📑 Documentation Index](DOCUMENTATION_INDEX.md)** - Complete navigation guide to all documentation
+
+### Core Guides
+- **[Architecture Guide](ARCHITECTURE.md)** - Complete system design with diagrams, concurrency model, and connection pooling
+- **[Configuration Examples](CONFIG_EXAMPLES.md)** - LLM providers, performance tuning, and deployment (Docker, K8s, Lambda)
+- **[Retry Behavior](RETRY_BEHAVIOR.md)** - Network resilience, error handling, and troubleshooting
+
+### Development
+- **[Development Guide](CLAUDE.md)** - For contributors and Claude Code users
+- **[Testing Guide](TESTING_QUICK_START.md)** - How to run tests
+- **[Feature Docs](FEATURE_COMPARATIVE_ANALYSIS.md)** - Comparative analysis feature
+
 ---
 
 ## 🚀 Quick Start
@@ -115,6 +129,8 @@ python test_env_loading.py
 ---
 
 ## ⚙️ Configuration
+
+> **📖 For extensive configuration examples and deployment scenarios, see [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md)**
 
 ### Environment Variables
 
@@ -287,6 +303,8 @@ python main.py --help | grep -A 20 "Examples:"
 ---
 
 ## 🏗️ Architecture
+
+> **📖 For detailed architecture documentation with diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md)**
 
 ### Project Structure
 
@@ -619,6 +637,8 @@ Explicit garbage collection ✓
 ---
 
 ## 🐛 Troubleshooting
+
+> **📖 For detailed retry behavior and network error handling, see [RETRY_BEHAVIOR.md](RETRY_BEHAVIOR.md)**
 
 ### Common Issues
 

@@ -1,6 +1,7 @@
 """
 Data fetching with caching support.
 """
+
 import logging
 import pandas as pd
 import yfinance as yf
@@ -13,7 +14,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
-    before_sleep_log
+    before_sleep_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,13 @@ logger = logging.getLogger(__name__)
 class CachedDataFetcher:
     """Data fetcher with intelligent caching and connection pooling."""
 
-    def __init__(self, cache_manager: CacheManager, timeout: int = 30,
-                 pool_connections: int = 10, pool_maxsize: int = 10) -> None:
+    def __init__(
+        self,
+        cache_manager: CacheManager,
+        timeout: int = 30,
+        pool_connections: int = 10,
+        pool_maxsize: int = 10,
+    ) -> None:
         """
         Initializes the CachedDataFetcher with a cache manager and connection pooling settings.
 
@@ -40,8 +46,9 @@ class CachedDataFetcher:
         # Note: yfinance no longer accepts custom sessions (uses curl_cffi)
         self.session = self._create_pooled_session(pool_connections, pool_maxsize)
 
-    def _create_pooled_session(self, pool_connections: int = 10,
-                               pool_maxsize: int = 10) -> Session:
+    def _create_pooled_session(
+        self, pool_connections: int = 10, pool_maxsize: int = 10
+    ) -> Session:
         """Create a requests Session with connection pooling and retry logic.
 
         Args:
@@ -58,7 +65,7 @@ class CachedDataFetcher:
             total=3,  # Total retries
             backoff_factor=1,  # Wait 1, 2, 4 seconds between retries
             status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
-            allowed_methods=["HEAD", "GET", "OPTIONS"]  # Retry on these methods
+            allowed_methods=["HEAD", "GET", "OPTIONS"],  # Retry on these methods
         )
 
         # Create adapter with connection pooling
@@ -66,7 +73,7 @@ class CachedDataFetcher:
             pool_connections=pool_connections,
             pool_maxsize=pool_maxsize,
             max_retries=retry_strategy,
-            pool_block=False  # Don't block when pool is full
+            pool_block=False,  # Don't block when pool is full
         )
 
         # Mount adapter for both http and https
@@ -74,19 +81,21 @@ class CachedDataFetcher:
         session.mount("https://", adapter)
 
         # Set default headers
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+        session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        )
 
-        logger.info(f"Created HTTP session with connection pool (size: {pool_maxsize})")
+        logger.debug(f"Created HTTP session with connection pool (size: {pool_maxsize})")
         return session
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type((OSError, ConnectionError, TimeoutError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True
+        reraise=True,
     )
     def fetch_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
         """
@@ -115,25 +124,25 @@ class CachedDataFetcher:
 
         # Fetch fresh data using yfinance's default session
         # yfinance manages its own connection pooling via curl_cffi
-        logger.info(f"Fetching price history for {ticker} (period: {period})")
+        logger.debug(f"Fetching price history for {ticker} (period: {period})")
         try:
-            t = yf.Ticker(ticker)
-            hist = t.history(period=period, auto_adjust=False)
+            ticker_obj = yf.Ticker(ticker)
+            price_history = ticker_obj.history(period=period, auto_adjust=False)
 
-            if hist.empty:
+            if price_history.empty:
                 raise ValueError(f"No data for {ticker}")
 
-            hist = hist.reset_index()
-            hist["ticker"] = ticker
+            price_history = price_history.reset_index()
+            price_history["ticker"] = ticker
 
-            if len(hist) < 5:
+            if len(price_history) < 5:
                 raise ValueError(f"Insufficient data for {ticker}")
 
             # Cache the result
-            self.cache.set(ticker, period, hist, "prices")
+            self.cache.set(ticker, period, price_history, "prices")
 
-            logger.info(f"Fetched {len(hist)} rows for {ticker}")
-            return hist
+            logger.debug(f"Fetched {len(price_history)} rows for {ticker}")
+            return price_history
 
         except ValueError:
             # Re-raise ValueError as-is (our own validation errors)
@@ -148,7 +157,7 @@ class CachedDataFetcher:
             # These don't trigger retry
             logger.error(f"Failed to fetch {ticker}: {e}")
             raise ValueError(f"Failed to fetch {ticker}: {str(e)}") from e
-    
+
     def validate_ticker_exists(self, ticker: str) -> bool:
         """
         Validates that a ticker exists by checking for its info.
@@ -162,13 +171,13 @@ class CachedDataFetcher:
         try:
             t = yf.Ticker(ticker)
             info = t.info
-            return bool(info and 'symbol' in info)
+            return bool(info and "symbol" in info)
         except (KeyError, AttributeError, TypeError, OSError, ValueError):
             return False
 
     def __del__(self) -> None:
         """Cleanup: Close the session when object is destroyed."""
-        if hasattr(self, 'session'):
+        if hasattr(self, "session"):
             try:
                 self.session.close()
                 logger.debug("Closed HTTP session pool")

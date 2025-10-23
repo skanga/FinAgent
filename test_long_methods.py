@@ -7,28 +7,31 @@ Tests that the refactored orchestrator.py and llm_interface.py methods:
 3. Have proper error handling
 4. Generate correct outputs
 """
+
 import os
 import sys
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, List
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pandas as pd
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from models import (
-    TickerAnalysis, AdvancedMetrics, TechnicalIndicators,
-    FundamentalData, ComparativeAnalysis, PortfolioMetrics
+    TickerAnalysis,
+    AdvancedMetrics,
+    TechnicalIndicators,
+    FundamentalData,
+    PortfolioMetrics,
 )
 from config import Config
 from orchestrator import FinancialReportOrchestrator
 from llm_interface import IntegratedLLMInterface
 
 
-class TestOrchestratorRefactoring:
+class TestOrchestrator:
     """Test refactored orchestrator methods."""
 
     def setup_method(self):
@@ -43,11 +46,15 @@ class TestOrchestratorRefactoring:
         self.config.openai_api_key = "test_key"
         self.config.openai_base_url = "https://api.openai.com/v1"
         self.config.cache_ttl_hours = 24
+        self.config.max_workers = 4  # Set max_workers for ThreadPoolExecutor
+        self.config.request_timeout = 30
+        self.config.model_name = "gpt-4o"
+        self.config.risk_free_rate = 0.02
 
         # Create orchestrator
-        with patch('orchestrator.IntegratedLLMInterface'), \
-             patch('orchestrator.CacheManager'), \
-             patch('orchestrator.ThreadSafeChartGenerator'):
+        with patch("orchestrator.IntegratedLLMInterface"), patch(
+            "orchestrator.CacheManager"
+        ), patch("orchestrator.ThreadSafeChartGenerator"):
             self.orchestrator = FinancialReportOrchestrator(self.config)
 
     def teardown_method(self):
@@ -55,7 +62,9 @@ class TestOrchestratorRefactoring:
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
-    def create_mock_analysis(self, ticker: str, has_error: bool = False) -> TickerAnalysis:
+    def create_mock_analysis(
+        self, ticker: str, has_error: bool = False
+    ) -> TickerAnalysis:
         """Create a mock TickerAnalysis object."""
         if has_error:
             return TickerAnalysis(
@@ -69,7 +78,7 @@ class TestOrchestratorRefactoring:
                 fundamentals=None,
                 advanced_metrics=AdvancedMetrics(),
                 technical_indicators=TechnicalIndicators(),
-                error="Test error"
+                error="Test error",
             )
 
         return TickerAnalysis(
@@ -83,7 +92,7 @@ class TestOrchestratorRefactoring:
             fundamentals=FundamentalData(revenue=1000000.0),
             advanced_metrics=AdvancedMetrics(sharpe_ratio=1.5, max_drawdown=-0.10),
             technical_indicators=TechnicalIndicators(rsi=55.0),
-            alerts=["Test alert"]
+            alerts=["Test alert"],
         )
 
     def test_fetch_benchmark_success(self):
@@ -94,15 +103,20 @@ class TestOrchestratorRefactoring:
         # Create mock CSV with benchmark data
         csv_path = Path(mock_analysis.csv_path)
         csv_path.parent.mkdir(parents=True, exist_ok=True)
-        df = pd.DataFrame({
-            'Date': pd.date_range('2024-01-01', periods=10),
-            'close': [100 + i for i in range(10)],
-            'daily_return': [0.01] * 10
-        })
+        df = pd.DataFrame(
+            {
+                "Date": pd.date_range("2024-01-01", periods=10),
+                "close": [100 + i for i in range(10)],
+                "daily_return": [0.01] * 10,
+            }
+        )
         df.to_csv(csv_path, index=False)
 
-        with patch.object(self.orchestrator, 'analyze_ticker', return_value=mock_analysis), \
-             patch('builtins.print'):  # Suppress print to avoid Unicode errors
+        with patch.object(
+            self.orchestrator, "analyze_ticker", return_value=mock_analysis
+        ), patch(
+            "builtins.print"
+        ):  # Suppress print to avoid Unicode errors
             benchmark_analysis, benchmark_returns = self.orchestrator._fetch_benchmark(
                 "1y", self.output_path
             )
@@ -116,8 +130,11 @@ class TestOrchestratorRefactoring:
         """Test benchmark fetching with errors."""
         mock_analysis = self.create_mock_analysis("SPY", has_error=True)
 
-        with patch.object(self.orchestrator, 'analyze_ticker', return_value=mock_analysis), \
-             patch('builtins.print'):  # Suppress print
+        with patch.object(
+            self.orchestrator, "analyze_ticker", return_value=mock_analysis
+        ), patch(
+            "builtins.print"
+        ):  # Suppress print
             benchmark_analysis, benchmark_returns = self.orchestrator._fetch_benchmark(
                 "1y", self.output_path
             )
@@ -133,8 +150,11 @@ class TestOrchestratorRefactoring:
         def mock_analyze(ticker, period, output_path, benchmark_returns=None):
             return mock_analyses[ticker]
 
-        with patch.object(self.orchestrator, 'analyze_ticker', side_effect=mock_analyze), \
-             patch('builtins.print'):  # Suppress print
+        with patch.object(
+            self.orchestrator, "analyze_ticker", side_effect=mock_analyze
+        ), patch(
+            "builtins.print"
+        ):  # Suppress print
             analyses = self.orchestrator._analyze_all_tickers(
                 tickers, "1y", self.output_path, None
             )
@@ -148,10 +168,10 @@ class TestOrchestratorRefactoring:
         analyses = {
             "AAPL": self.create_mock_analysis("AAPL"),
             "MSFT": self.create_mock_analysis("MSFT"),
-            "FAIL": self.create_mock_analysis("FAIL", has_error=True)
+            "FAIL": self.create_mock_analysis("FAIL", has_error=True),
         }
 
-        with patch('builtins.print'):  # Suppress print
+        with patch("builtins.print"):  # Suppress print
             successful, failed = self.orchestrator._process_analysis_results(analyses)
 
         assert len(successful) == 2
@@ -164,7 +184,7 @@ class TestOrchestratorRefactoring:
         """Test when all analyses fail."""
         analyses = {
             "FAIL1": self.create_mock_analysis("FAIL1", has_error=True),
-            "FAIL2": self.create_mock_analysis("FAIL2", has_error=True)
+            "FAIL2": self.create_mock_analysis("FAIL2", has_error=True),
         }
 
         try:
@@ -177,19 +197,23 @@ class TestOrchestratorRefactoring:
         """Test portfolio metrics calculation with 2+ tickers."""
         successful = {
             "AAPL": self.create_mock_analysis("AAPL"),
-            "MSFT": self.create_mock_analysis("MSFT")
+            "MSFT": self.create_mock_analysis("MSFT"),
         }
 
         mock_portfolio_metrics = PortfolioMetrics(
             total_value=10000.0,
             portfolio_return=0.15,
             portfolio_volatility=0.18,
-            portfolio_sharpe=0.8
+            portfolio_sharpe=0.8,
         )
 
-        with patch.object(self.orchestrator.portfolio_analyzer, 'calculate_portfolio_metrics',
-                         return_value=mock_portfolio_metrics), \
-             patch('builtins.print'):  # Suppress print
+        with patch.object(
+            self.orchestrator.portfolio_analyzer,
+            "calculate_portfolio_metrics",
+            return_value=mock_portfolio_metrics,
+        ), patch(
+            "builtins.print"
+        ):  # Suppress print
             result = self.orchestrator._calculate_portfolio_metrics_if_needed(
                 successful, None
             )
@@ -199,9 +223,7 @@ class TestOrchestratorRefactoring:
 
     def test_calculate_portfolio_metrics_single_ticker(self):
         """Test that portfolio metrics are not calculated for single ticker."""
-        successful = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        successful = {"AAPL": self.create_mock_analysis("AAPL")}
 
         result = self.orchestrator._calculate_portfolio_metrics_if_needed(
             successful, None
@@ -213,11 +235,14 @@ class TestOrchestratorRefactoring:
         """Test comparison chart generation."""
         successful = {
             "AAPL": self.create_mock_analysis("AAPL"),
-            "MSFT": self.create_mock_analysis("MSFT")
+            "MSFT": self.create_mock_analysis("MSFT"),
         }
 
-        with patch.object(self.orchestrator.chart_gen, 'create_comparison_chart'), \
-             patch('builtins.print'):  # Suppress print
+        with patch.object(
+            self.orchestrator.chart_gen, "create_comparison_chart"
+        ), patch(
+            "builtins.print"
+        ):  # Suppress print
             chart_files = self.orchestrator._generate_comparison_charts(
                 successful, self.output_path
             )
@@ -244,15 +269,14 @@ class TestOrchestratorRefactoring:
     def test_collect_performance_metrics(self):
         """Test performance metrics collection."""
         import time
+
         start_time = time.time() - 10.0  # Simulate 10 seconds
 
         successful = {
             "AAPL": self.create_mock_analysis("AAPL"),
-            "MSFT": self.create_mock_analysis("MSFT")
+            "MSFT": self.create_mock_analysis("MSFT"),
         }
-        failed = {
-            "FAIL": self.create_mock_analysis("FAIL", has_error=True)
-        }
+        failed = {"FAIL": self.create_mock_analysis("FAIL", has_error=True)}
 
         metrics = self.orchestrator._collect_performance_metrics(
             start_time=start_time,
@@ -261,7 +285,7 @@ class TestOrchestratorRefactoring:
             failed=failed,
             chart_files=["chart1.png", "chart2.png"],
             quality_score=8,
-            portfolio_metrics=None
+            portfolio_metrics=None,
         )
 
         assert metrics["tickers_analyzed"] == 3
@@ -273,7 +297,7 @@ class TestOrchestratorRefactoring:
         assert metrics["execution_time_seconds"] >= 10.0
 
 
-class TestLLMInterfaceRefactoring:
+class TestLLMInterface:
     """Test refactored LLM interface methods."""
 
     def setup_method(self):
@@ -281,8 +305,10 @@ class TestLLMInterfaceRefactoring:
         self.config = Mock(spec=Config)
         self.config.openai_api_key = "test_key"
         self.config.openai_base_url = "https://api.openai.com/v1"
+        self.config.request_timeout = 30
+        self.config.model_name = "gpt-4o"
 
-        with patch('llm_interface.ChatOpenAI'):
+        with patch("llm_interface.ChatOpenAI"):
             self.llm = IntegratedLLMInterface(self.config)
 
     def create_mock_analysis(self, ticker: str) -> TickerAnalysis:
@@ -298,7 +324,7 @@ class TestLLMInterfaceRefactoring:
             fundamentals=FundamentalData(revenue=1000000.0),
             advanced_metrics=AdvancedMetrics(sharpe_ratio=1.5),
             technical_indicators=TechnicalIndicators(rsi=55.0),
-            alerts=["Test alert"]
+            alerts=["Test alert"],
         )
 
     def test_generate_report_header(self):
@@ -313,12 +339,11 @@ class TestLLMInterfaceRefactoring:
 
     def test_generate_executive_summary_section(self):
         """Test executive summary section generation."""
-        analyses = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        analyses = {"AAPL": self.create_mock_analysis("AAPL")}
 
-        with patch.object(self.llm, 'generate_narrative_summary',
-                         return_value="Test narrative"):
+        with patch.object(
+            self.llm, "generate_narrative_summary", return_value="Test narrative"
+        ):
             section = self.llm._generate_executive_summary_section(analyses, "1y")
 
         assert len(section) == 3
@@ -332,11 +357,12 @@ class TestLLMInterfaceRefactoring:
             total_value=10000.0,
             portfolio_return=0.15,
             portfolio_volatility=0.18,
-            portfolio_sharpe=0.8
+            portfolio_sharpe=0.8,
         )
 
-        with patch.object(self.llm, '_generate_portfolio_section',
-                         return_value="Portfolio content"):
+        with patch.object(
+            self.llm, "_generate_portfolio_section", return_value="Portfolio content"
+        ):
             section = self.llm._generate_portfolio_overview_section(portfolio_metrics)
 
         assert len(section) == 3
@@ -350,9 +376,7 @@ class TestLLMInterfaceRefactoring:
 
     def test_generate_alerts_section_with_alerts(self):
         """Test alerts section with active alerts."""
-        analyses = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        analyses = {"AAPL": self.create_mock_analysis("AAPL")}
         analyses["AAPL"].alerts = ["Alert 1", "Alert 2"]
 
         section = self.llm._generate_alerts_section(analyses)
@@ -364,9 +388,7 @@ class TestLLMInterfaceRefactoring:
 
     def test_generate_alerts_section_without_alerts(self):
         """Test alerts section without alerts."""
-        analyses = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        analyses = {"AAPL": self.create_mock_analysis("AAPL")}
         analyses["AAPL"].alerts = []
 
         section = self.llm._generate_alerts_section(analyses)
@@ -387,8 +409,8 @@ class TestLLMInterfaceRefactoring:
                 fundamentals=None,
                 advanced_metrics=AdvancedMetrics(),
                 technical_indicators=TechnicalIndicators(),
-                error="Test error"
-            )
+                error="Test error",
+            ),
         }
 
         section = self.llm._generate_failures_section(analyses)
@@ -400,32 +422,34 @@ class TestLLMInterfaceRefactoring:
 
     def test_generate_failures_section_without_failures(self):
         """Test failures section without errors."""
-        analyses = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        analyses = {"AAPL": self.create_mock_analysis("AAPL")}
 
         section = self.llm._generate_failures_section(analyses)
         assert section == []
 
     def test_generate_detailed_report_structure(self):
         """Test that detailed report has correct structure."""
-        analyses = {
-            "AAPL": self.create_mock_analysis("AAPL")
-        }
+        analyses = {"AAPL": self.create_mock_analysis("AAPL")}
 
         portfolio_metrics = PortfolioMetrics(
-            total_value=10000.0,
-            portfolio_return=0.15,
-            portfolio_volatility=0.18
+            total_value=10000.0, portfolio_return=0.15, portfolio_volatility=0.18
         )
 
-        with patch.object(self.llm, 'generate_narrative_summary', return_value="Narrative"), \
-             patch.object(self.llm, '_generate_portfolio_section', return_value="Portfolio"), \
-             patch.object(self.llm, '_generate_metrics_table', return_value="Metrics"), \
-             patch.object(self.llm, '_generate_fundamental_section', return_value="Fundamentals"), \
-             patch.object(self.llm, '_generate_individual_analysis', return_value="Individual"), \
-             patch.object(self.llm, '_generate_risk_analysis', return_value="Risk"), \
-             patch.object(self.llm, '_generate_recommendations', return_value="Recommendations"):
+        with patch.object(
+            self.llm, "generate_narrative_summary", return_value="Narrative"
+        ), patch.object(
+            self.llm, "_generate_portfolio_section", return_value="Portfolio"
+        ), patch.object(
+            self.llm, "_generate_metrics_table", return_value="Metrics"
+        ), patch.object(
+            self.llm, "_generate_fundamental_section", return_value="Fundamentals"
+        ), patch.object(
+            self.llm, "_generate_individual_analysis", return_value="Individual"
+        ), patch.object(
+            self.llm, "_generate_risk_analysis", return_value="Risk"
+        ), patch.object(
+            self.llm, "_generate_recommendations", return_value="Recommendations"
+        ):
 
             report = self.llm.generate_detailed_report(
                 analyses, None, portfolio_metrics, "1y"
@@ -445,7 +469,6 @@ class TestLLMInterfaceRefactoring:
 def run_tests():
     """Run all tests."""
     import pytest
-    import sys
 
     # Run pytest
     exit_code = pytest.main([__file__, "-v", "-s"])

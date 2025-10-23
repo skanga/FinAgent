@@ -3,12 +3,15 @@ Configuration constants for financial analysis.
 
 This module centralizes all magic numbers and thresholds used throughout the application,
 making them easy to find, understand, and modify.
-"""
 
+All constants are organized into classes for better organization and to eliminate
+duplication. Use `ClassName.CONSTANT_NAME` to access values.
+"""
 
 # ============================================================================
 # THRESHOLD CLASSES (Organized Configuration)
 # ============================================================================
+
 
 class AnalysisThresholds:
     """Analysis alert and signal thresholds."""
@@ -24,14 +27,14 @@ class AnalysisThresholds:
     OVERSOLD_RSI = 30  # Below this indicates oversold conditions
 
     # VaR threshold
-    HIGH_VAR = -0.03  # VaR 95% threshold for alerts
+    VALUE_AT_RISK_95_THRESHOLD = -0.03  # VaR 95% threshold for alerts
 
     # Performance thresholds
     UNDERPERFORMANCE = -0.05  # -5% vs benchmark triggers alert
 
 
-class TechnicalIndicators:
-    """Technical indicator calculation parameters."""
+class TechnicalIndicatorParameters:
+    """Technical indicator calculation parameters and window sizes."""
 
     # RSI (Relative Strength Index)
     RSI_PERIOD = 14  # Standard RSI calculation period
@@ -51,137 +54,100 @@ class TechnicalIndicators:
     MACD_SIGNAL_PERIOD = 9  # Signal line EMA period
 
 
-# ============================================================================
-# BACKWARD COMPATIBILITY (Legacy Constants)
-# ============================================================================
-# These maintain backward compatibility with existing code
-# New code should use the class-based constants above
+class TimeConstants:
+    """Time and annualization constants."""
 
-# RSI (Relative Strength Index)
-RSI_PERIOD = TechnicalIndicators.RSI_PERIOD
-RSI_OVERBOUGHT_THRESHOLD = AnalysisThresholds.OVERBOUGHT_RSI
-RSI_OVERSOLD_THRESHOLD = AnalysisThresholds.OVERSOLD_RSI
+    # Trading days
+    TRADING_DAYS_PER_YEAR = 252  # Standard number of trading days in a year
 
-# Moving Averages
-MA_SHORT_PERIOD = TechnicalIndicators.MA_SHORT_PERIOD
-MA_LONG_PERIOD = TechnicalIndicators.MA_LONG_PERIOD
-VOLATILITY_WINDOW = TechnicalIndicators.VOLATILITY_WINDOW
+    # Minimum data requirements
+    MIN_DATA_POINTS_BASIC = 10  # Minimum data points for basic calculations
+    MIN_DATA_POINTS_PORTFOLIO = 20  # Minimum data points for portfolio analysis
 
-# Bollinger Bands
-BOLLINGER_PERIOD = TechnicalIndicators.BOLLINGER_PERIOD
-BOLLINGER_STD_DEV = TechnicalIndicators.BOLLINGER_STD_DEV
+    # Minimum periods for rolling calculations
+    MIN_PERIODS_SHORT_MA = 5  # Minimum periods for short-term moving average
+    MIN_PERIODS_LONG_MA = 10  # Minimum periods for long-term moving average
+    MIN_PERIODS_VOLATILITY = 5  # Minimum periods for volatility calculation
 
-# MACD (Moving Average Convergence Divergence)
-MACD_FAST_PERIOD = TechnicalIndicators.MACD_FAST_PERIOD
-MACD_SLOW_PERIOD = TechnicalIndicators.MACD_SLOW_PERIOD
-MACD_SIGNAL_PERIOD = TechnicalIndicators.MACD_SIGNAL_PERIOD
+    # Data availability thresholds
+    MIN_ROWS_FOR_FULL_ANALYSIS = 1  # Minimum number of rows to attempt analysis
+    DATA_POINTS_DIVISOR_FOR_VOL_WINDOW = 3  # Divisor for calculating volatility window
+    # Explanation: vol_window = min(VOLATILITY_WINDOW, max(1, n_rows // 3))
+    # This ensures volatility calculations adapt to available data:
+    # - With 60 days of data: vol_window = min(20, 20) = 20 days
+    # - With 30 days of data: vol_window = min(20, 10) = 10 days
+    # - With 9 days of data: vol_window = min(20, 3) = 3 days
 
-# ============================================================================
-# TIME AND ANNUALIZATION
-# ============================================================================
 
-# Trading days
-TRADING_DAYS_PER_YEAR = 252  # Standard number of trading days in a year
+class LimitsAndConstraints:
+    """System limits and constraints."""
 
-# Minimum data requirements
-MIN_DATA_POINTS_BASIC = 10  # Minimum data points for basic calculations
-MIN_DATA_POINTS_PORTFOLIO = 20  # Minimum data points for portfolio analysis
+    # Ticker limits
+    MAX_TICKERS_ALLOWED = 20  # Maximum number of tickers to analyze at once
 
-# ============================================================================
-# ALERT THRESHOLDS (Backward Compatibility)
-# ============================================================================
+    # Near-zero thresholds
+    NEAR_ZERO_VARIANCE_THRESHOLD = 1e-10  # Threshold for near-zero variance detection
+    MIN_DOWNSIDE_DEVIATION = 0.001  # Minimum downside deviation to avoid division by zero
 
-# Volatility alerts
-VOLATILITY_ALERT_THRESHOLD = AnalysisThresholds.HIGH_VOLATILITY
-HIGH_VAR_THRESHOLD = AnalysisThresholds.HIGH_VAR
+    # Portfolio weights
+    PORTFOLIO_WEIGHT_TOLERANCE = 0.01  # Acceptable deviation from sum=1.0 for weights
 
-# Drawdown alerts
-DRAWDOWN_ALERT_THRESHOLD = AnalysisThresholds.LARGE_DRAWDOWN
+    # Valid periods for yfinance
+    VALID_PERIODS = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
 
-# Performance alerts
-UNDERPERFORMANCE_THRESHOLD = AnalysisThresholds.UNDERPERFORMANCE
 
-# ============================================================================
-# LIMITS AND CONSTRAINTS
-# ============================================================================
+class ChartConfiguration:
+    """Chart and visualization configuration."""
 
-# Ticker limits
-MAX_TICKERS_ALLOWED = 20  # Maximum number of tickers to analyze at once
+    # Figure sizes (width, height in inches)
+    PRICE_CHART_SIZE = (14, 10)  # Main price chart with subplots
+    COMPARISON_CHART_SIZE = (14, 8)  # Comparison/portfolio charts
+    RISK_REWARD_CHART_SIZE = (12, 8)  # Risk-reward scatter plot
 
-# Near-zero thresholds
-NEAR_ZERO_VARIANCE_THRESHOLD = 1e-10  # Threshold for near-zero variance detection
-MIN_DOWNSIDE_DEVIATION = 0.001  # Minimum downside deviation to avoid division by zero
+    # Chart DPI
+    CHART_DPI = 150  # Resolution for saved charts
 
-# Portfolio weights
-PORTFOLIO_WEIGHT_TOLERANCE = 0.01  # Acceptable deviation from sum=1.0 for weights
+    # Font sizes
+    TITLE_FONTSIZE = 16
+    AXIS_FONTSIZE = 12
 
-# Valid periods for yfinance
-VALID_PERIODS = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']
+    # Subplot height ratios
+    PRICE_CHART_HEIGHT_RATIOS = [3, 1]  # Main chart : RSI chart
 
-# ============================================================================
-# CHART CONFIGURATION
-# ============================================================================
 
-# Figure sizes (width, height in inches)
-PRICE_CHART_SIZE = (14, 10)  # Main price chart with subplots
-COMPARISON_CHART_SIZE = (14, 8)  # Comparison/portfolio charts
-RISK_REWARD_CHART_SIZE = (12, 8)  # Risk-reward scatter plot
+class DataValidation:
+    """Data validation constants."""
 
-# Chart DPI
-CHART_DPI = 150  # Resolution for saved charts
+    # YoY growth calculation
+    YOY_QUARTERS_LOOKBACK = 4  # Number of quarters for year-over-year comparison
+    CURRENT_PERIOD_INDEX = 0  # Index for current period in financial statements
 
-# Font sizes
-CHART_TITLE_FONTSIZE = 16
-CHART_AXIS_FONTSIZE = 12
+    # Minimum required quarters for growth calculation
+    MIN_QUARTERS_FOR_GROWTH = 5  # Need at least 5 quarters (current + 4 back)
 
-# Subplot height ratios
-PRICE_CHART_HEIGHT_RATIOS = [3, 1]  # Main chart : RSI chart
 
-# ============================================================================
-# DATA VALIDATION
-# ============================================================================
+class Defaults:
+    """Default configuration values."""
 
-# YoY growth calculation
-YOY_QUARTERS_LOOKBACK = 4  # Number of quarters for year-over-year comparison
-CURRENT_PERIOD_INDEX = 0  # Index for current period in financial statements
+    # Cache defaults (can be overridden by config)
+    CACHE_TTL_HOURS = 24  # Default cache time-to-live
 
-# Minimum required quarters for growth calculation
-MIN_QUARTERS_FOR_GROWTH = 5  # Need at least 5 quarters (current + 4 back)
+    # Risk-free rate (can be overridden by config)
+    RISK_FREE_RATE = 0.02  # 2% annual risk-free rate
 
-# ============================================================================
-# CACHE CONFIGURATION
-# ============================================================================
+    # Benchmark ticker (can be overridden by config)
+    BENCHMARK_TICKER = "SPY"  # S&P 500 ETF
 
-# Cache defaults (can be overridden by config)
-DEFAULT_CACHE_TTL_HOURS = 24  # Default cache time-to-live
+    # Parallel processing (can be overridden by config)
+    MAX_WORKERS = 3  # Default number of parallel worker threads
 
-# ============================================================================
-# RISK PARAMETERS
-# ============================================================================
+    # Request timeout (can be overridden by config)
+    REQUEST_TIMEOUT = 30  # seconds
 
-# Risk-free rate (can be overridden by config)
-DEFAULT_RISK_FREE_RATE = 0.02  # 2% annual risk-free rate
+    # Report quality scoring
+    MIN_QUALITY_SCORE = 0  # Minimum quality score
+    MAX_QUALITY_SCORE = 10  # Maximum quality score
 
-# Benchmark ticker (can be overridden by config)
-DEFAULT_BENCHMARK_TICKER = "SPY"  # S&P 500 ETF
-
-# ============================================================================
-# COMPUTATION DEFAULTS
-# ============================================================================
-
-# Parallel processing (can be overridden by config)
-DEFAULT_MAX_WORKERS = 3  # Default number of parallel worker threads
-
-# Request timeout (can be overridden by config)
-DEFAULT_REQUEST_TIMEOUT = 30  # seconds
-
-# ============================================================================
-# QUALITY THRESHOLDS
-# ============================================================================
-
-# Report quality scoring
-MIN_QUALITY_SCORE = 0  # Minimum quality score
-MAX_QUALITY_SCORE = 10  # Maximum quality score
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -196,31 +162,41 @@ def validate_constants() -> None:
         ValueError: If any constant is invalid.
     """
     # RSI thresholds
-    if not (0 < RSI_OVERBOUGHT_THRESHOLD <= 100):
-        raise ValueError(f"RSI_OVERBOUGHT_THRESHOLD must be between 0 and 100, got {RSI_OVERBOUGHT_THRESHOLD}")
+    if not (0 < AnalysisThresholds.OVERBOUGHT_RSI <= 100):
+        raise ValueError(
+            f"OVERBOUGHT_RSI must be between 0 and 100, got {AnalysisThresholds.OVERBOUGHT_RSI}"
+        )
 
-    if not (0 <= RSI_OVERSOLD_THRESHOLD < 100):
-        raise ValueError(f"RSI_OVERSOLD_THRESHOLD must be between 0 and 100, got {RSI_OVERSOLD_THRESHOLD}")
+    if not (0 <= AnalysisThresholds.OVERSOLD_RSI < 100):
+        raise ValueError(
+            f"OVERSOLD_RSI must be between 0 and 100, got {AnalysisThresholds.OVERSOLD_RSI}"
+        )
 
-    if RSI_OVERSOLD_THRESHOLD >= RSI_OVERBOUGHT_THRESHOLD:
-        raise ValueError("RSI_OVERSOLD_THRESHOLD must be less than RSI_OVERBOUGHT_THRESHOLD")
+    if AnalysisThresholds.OVERSOLD_RSI >= AnalysisThresholds.OVERBOUGHT_RSI:
+        raise ValueError(
+            "OVERSOLD_RSI must be less than OVERBOUGHT_RSI"
+        )
 
     # Period validations
-    if RSI_PERIOD <= 0:
-        raise ValueError(f"RSI_PERIOD must be positive, got {RSI_PERIOD}")
+    if TechnicalIndicatorParameters.RSI_PERIOD <= 0:
+        raise ValueError(f"RSI_PERIOD must be positive, got {TechnicalIndicatorParameters.RSI_PERIOD}")
 
-    if MA_SHORT_PERIOD >= MA_LONG_PERIOD:
+    if TechnicalIndicatorParameters.MA_SHORT_PERIOD >= TechnicalIndicatorParameters.MA_LONG_PERIOD:
         raise ValueError("MA_SHORT_PERIOD must be less than MA_LONG_PERIOD")
 
-    if MACD_FAST_PERIOD >= MACD_SLOW_PERIOD:
+    if TechnicalIndicatorParameters.MACD_FAST_PERIOD >= TechnicalIndicatorParameters.MACD_SLOW_PERIOD:
         raise ValueError("MACD_FAST_PERIOD must be less than MACD_SLOW_PERIOD")
 
     # Limits
-    if MAX_TICKERS_ALLOWED <= 0:
-        raise ValueError(f"MAX_TICKERS_ALLOWED must be positive, got {MAX_TICKERS_ALLOWED}")
+    if LimitsAndConstraints.MAX_TICKERS_ALLOWED <= 0:
+        raise ValueError(
+            f"MAX_TICKERS_ALLOWED must be positive, got {LimitsAndConstraints.MAX_TICKERS_ALLOWED}"
+        )
 
-    if TRADING_DAYS_PER_YEAR <= 0:
-        raise ValueError(f"TRADING_DAYS_PER_YEAR must be positive, got {TRADING_DAYS_PER_YEAR}")
+    if TimeConstants.TRADING_DAYS_PER_YEAR <= 0:
+        raise ValueError(
+            f"TRADING_DAYS_PER_YEAR must be positive, got {TimeConstants.TRADING_DAYS_PER_YEAR}"
+        )
 
 
 # Validate on import
@@ -234,32 +210,49 @@ validate_constants()
 
 def get_all_constants() -> dict:
     """
-    Gets a dictionary of all constants with their values.
+    Gets a dictionary of all constants organized by class.
 
     Returns:
-        dict: A dictionary of constant names and values.
+        dict: A nested dictionary of class names -> constant names -> values.
     """
-    return {
-        name: value
-        for name, value in globals().items()
-        if name.isupper() and not name.startswith('_')
-    }
+    classes = [
+        AnalysisThresholds,
+        TechnicalIndicatorParameters,
+        TimeConstants,
+        LimitsAndConstraints,
+        ChartConfiguration,
+        DataValidation,
+        Defaults,
+    ]
+
+    result = {}
+    for cls in classes:
+        result[cls.__name__] = {
+            name: value
+            for name, value in vars(cls).items()
+            if name.isupper() and not name.startswith("_")
+        }
+
+    return result
 
 
 def print_constants() -> None:
     """
-    Prints all constants in a readable format.
+    Prints all constants in a readable format organized by class.
     """
     constants = get_all_constants()
 
-    print("=" * 60)
+    print("=" * 80)
     print("FINANCIAL ANALYSIS CONSTANTS")
-    print("=" * 60)
+    print("=" * 80)
 
-    for name, value in sorted(constants.items()):
-        print(f"{name:40} = {value}")
+    for class_name, class_constants in constants.items():
+        print(f"\n{class_name}:")
+        print("-" * 80)
+        for name, value in sorted(class_constants.items()):
+            print(f"  {name:50} = {value}")
 
-    print("=" * 60)
+    print("=" * 80)
 
 
 if __name__ == "__main__":

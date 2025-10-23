@@ -1,8 +1,10 @@
 """
 LLM integration for narrative generation and parsing.
 """
+
 import json
 import logging
+import httpx
 import pandas as pd
 from config import Config
 from httpx import Limits, Timeout
@@ -15,7 +17,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
-    before_sleep_log
+    before_sleep_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,9 +26,12 @@ logger = logging.getLogger(__name__)
 class IntegratedLLMInterface:
     """LLM interface with connection pooling for better performance."""
 
-    def __init__(self, config: Config,
-                 max_connections: int = 20,
-                 max_keepalive_connections: int = 10) -> None:
+    def __init__(
+        self,
+        config: Config,
+        max_connections: int = 20,
+        max_keepalive_connections: int = 10,
+    ) -> None:
         """
         Initializes the IntegratedLLMInterface with a configuration object and connection pooling settings.
 
@@ -40,8 +45,7 @@ class IntegratedLLMInterface:
         # Create HTTP client with connection pooling
         # LangChain's ChatOpenAI uses httpx internally
         http_client = self._create_pooled_http_client(
-            max_connections,
-            max_keepalive_connections
+            max_connections, max_keepalive_connections
         )
 
         # Initialize LLM with connection pooling
@@ -52,7 +56,7 @@ class IntegratedLLMInterface:
             temperature=0.3,
             timeout=config.request_timeout,
             http_client=http_client,  # Use our pooled client
-            http_async_client=None  # We're not using async
+            http_async_client=None,  # We're not using async
         )
 
         # Log LLM setup (without exposing API key)
@@ -65,8 +69,9 @@ class IntegratedLLMInterface:
         self._setup_prompts()
         self._setup_chains()
 
-    def _create_pooled_http_client(self, max_connections: int = 20,
-                                   max_keepalive: int = 10):
+    def _create_pooled_http_client(
+        self, max_connections: int = 20, max_keepalive: int = 10
+    ) -> "httpx.Client":
         """Create an httpx client with connection pooling.
 
         Args:
@@ -82,7 +87,7 @@ class IntegratedLLMInterface:
         limits = Limits(
             max_connections=max_connections,
             max_keepalive_connections=max_keepalive,
-            keepalive_expiry=30.0  # Keep connections alive for 30 seconds
+            keepalive_expiry=30.0,  # Keep connections alive for 30 seconds
         )
 
         # Configure timeout
@@ -90,7 +95,7 @@ class IntegratedLLMInterface:
             connect=10.0,  # Connection timeout
             read=self.config.request_timeout,  # Read timeout
             write=10.0,  # Write timeout
-            pool=5.0  # Pool timeout
+            pool=5.0,  # Pool timeout
         )
 
         # Create client with pooling
@@ -98,7 +103,7 @@ class IntegratedLLMInterface:
             limits=limits,
             timeout=timeout,
             http2=True,  # Enable HTTP/2 for multiplexing
-            follow_redirects=True
+            follow_redirects=True,
         )
 
         logger.info(
@@ -107,7 +112,7 @@ class IntegratedLLMInterface:
         )
 
         return client
-    
+
     def _setup_prompts(self) -> None:
         """Setup prompt templates."""
         self.parse_prompt = PromptTemplate(
@@ -124,9 +129,9 @@ Return ONLY valid JSON with:
 
 Example: {{"tickers": ["AAPL"], "period": "1y", "metrics": ["returns", "risk"], "output_format": "markdown"}}
 
-Return ONLY the JSON, no other text."""
+Return ONLY the JSON, no other text.""",
         )
-        
+
         self.narrative_prompt = PromptTemplate(
             input_variables=["analysis_data", "period"],
             template="""You are a senior financial analyst. Generate a compelling executive summary.
@@ -170,9 +175,9 @@ IMPORTANT GUIDELINES:
    - ❌ Confusing daily and annualized figures
 
 Be precise, accurate, and professional. Use correct technical definitions.
-Return ONLY the narrative text."""
+Return ONLY the narrative text.""",
         )
-        
+
         self.review_prompt = PromptTemplate(
             input_variables=["report_content", "data_summary"],
             template="""Review this financial report for accuracy and quality.
@@ -223,21 +228,21 @@ Return valid JSON with:
 
 Be precise: Only flag as "issues" if the report is factually wrong or misleading.
 
-Return ONLY the JSON."""
+Return ONLY the JSON.""",
         )
-    
+
     def _setup_chains(self) -> None:
         """Setup LangChain chains."""
         self.parser_chain = self.parse_prompt | self.llm
         self.narrative_chain = self.narrative_prompt | self.llm
         self.review_chain = self.review_prompt | self.llm
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True
+        reraise=True,
     )
     def parse_natural_language_request(self, user_request: str) -> ParsedRequest:
         """
@@ -273,7 +278,7 @@ Return ONLY the JSON."""
                 tickers=[t.upper().strip() for t in parsed_json.get("tickers", [])],
                 period=parsed_json.get("period", "1y"),
                 metrics=parsed_json.get("metrics", []),
-                output_format=parsed_json.get("output_format", "markdown")
+                output_format=parsed_json.get("output_format", "markdown"),
             )
 
             parsed.validate()
@@ -282,7 +287,7 @@ Return ONLY the JSON."""
 
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse failed: {e}")
-            raise ValueError(f"Failed to parse JSON response") from e
+            raise ValueError("Failed to parse JSON response") from e
         except (KeyError, ValueError, TypeError, AttributeError) as e:
             logger.error(f"Parse error: {e}")
             raise ValueError(f"Parse error: {str(e)}") from e
@@ -292,10 +297,11 @@ Return ONLY the JSON."""
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True
+        reraise=True,
     )
-    def generate_narrative_summary(self, analyses: Dict[str, TickerAnalysis],
-                                   period: str) -> str:
+    def generate_narrative_summary(
+        self, analyses: Dict[str, TickerAnalysis], period: str
+    ) -> str:
         """
         Generates a narrative summary of the financial analysis using the LLM.
 
@@ -309,7 +315,7 @@ Return ONLY the JSON."""
             str: The narrative summary.
         """
         logger.info("Generating narrative summary with LLM")
-        
+
         # Prepare concise data for LLM with clear labels
         analysis_summary = {}
         for ticker, analysis in analyses.items():
@@ -318,19 +324,37 @@ Return ONLY the JSON."""
                     "current_price": f"${analysis.latest_close:.2f}",
                     "avg_daily_return": f"{analysis.avg_daily_return * 100:.3f}%",
                     "daily_volatility": f"{analysis.volatility * 100:.2f}%",
-                    "sharpe_ratio_daily": round(analysis.advanced_metrics.sharpe_ratio, 2) if analysis.advanced_metrics.sharpe_ratio else None,
+                    "sharpe_ratio_daily": (
+                        round(analysis.advanced_metrics.sharpe_ratio, 2)
+                        if analysis.advanced_metrics.sharpe_ratio
+                        else None
+                    ),
                     "max_drawdown_pct": f"{(analysis.advanced_metrics.max_drawdown or 0) * 100:.1f}%",
-                    "rsi": round(analysis.technical_indicators.rsi, 1) if analysis.technical_indicators.rsi else None,
-                    "pe_ratio": round(analysis.ratios.get('pe_ratio'), 1) if analysis.ratios.get('pe_ratio') else None,
-                    "pb_ratio": round(analysis.ratios.get('price_to_book'), 2) if analysis.ratios.get('price_to_book') else None,
-                    "alerts": analysis.alerts
+                    "rsi": (
+                        round(analysis.technical_indicators.rsi, 1)
+                        if analysis.technical_indicators.rsi
+                        else None
+                    ),
+                    "pe_ratio": (
+                        round(analysis.ratios.get("pe_ratio"), 1)
+                        if analysis.ratios.get("pe_ratio")
+                        else None
+                    ),
+                    "pb_ratio": (
+                        round(analysis.ratios.get("price_to_book"), 2)
+                        if analysis.ratios.get("price_to_book")
+                        else None
+                    ),
+                    "alerts": analysis.alerts,
                 }
-        
+
         try:
-            response = self.narrative_chain.invoke({
-                "analysis_data": json.dumps(analysis_summary, indent=2),
-                "period": period
-            })
+            response = self.narrative_chain.invoke(
+                {
+                    "analysis_data": json.dumps(analysis_summary, indent=2),
+                    "period": period,
+                }
+            )
 
             narrative = response.content.strip()
             logger.info("Generated narrative summary")
@@ -339,19 +363,25 @@ Return ONLY the JSON."""
         except (KeyError, ValueError, TypeError, AttributeError, OSError) as e:
             logger.error(f"Failed to generate narrative: {e}")
             return self._fallback_narrative(analyses, period)
-    
-    def _fallback_narrative(self, analyses: Dict[str, TickerAnalysis], period: str) -> str:
+
+    def _fallback_narrative(
+        self, analyses: Dict[str, TickerAnalysis], period: str
+    ) -> str:
         """Fallback narrative if LLM fails."""
         successful = {t: a for t, a in analyses.items() if not a.error}
         if not successful:
             return "Analysis completed but no valid data available."
-        
-        best = max(successful.items(), key=lambda x: x[1].avg_daily_return)
-        worst = min(successful.items(), key=lambda x: x[1].avg_daily_return)
-        
+
+        best_performing_ticker = max(
+            successful.items(), key=lambda x: x[1].avg_daily_return
+        )
+        worst_performing_ticker = min(
+            successful.items(), key=lambda x: x[1].avg_daily_return
+        )
+
         return f"""Over the {period} period, {len(successful)} stocks were analyzed.
-{best[0]} showed the strongest performance with a {best[1].avg_daily_return*100:.2f}% average daily return,
-while {worst[0]} had the weakest returns at {worst[1].avg_daily_return*100:.2f}%.
+{best_performing_ticker[0]} showed the strongest performance with a {best_performing_ticker[1].avg_daily_return*100:.2f}% average daily return,
+while {worst_performing_ticker[0]} had the weakest returns at {worst_performing_ticker[1].avg_daily_return*100:.2f}%.
 Risk metrics varied across the portfolio, with several stocks showing elevated volatility warranting monitoring."""
 
     @retry(
@@ -359,10 +389,11 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         wait=wait_exponential(multiplier=1, min=1, max=10),
         retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True
+        reraise=True,
     )
-    def review_report(self, report_content: str,
-                     analyses: Dict[str, TickerAnalysis]) -> Tuple[List[str], int, Dict]:
+    def review_report(
+        self, report_content: str, analyses: Dict[str, TickerAnalysis]
+    ) -> Tuple[List[str], int, Dict]:
         """
         Reviews a financial report for accuracy and quality using the LLM.
 
@@ -387,15 +418,17 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
                     "daily_volatility": analysis.volatility,
                     "sharpe_ratio": analysis.advanced_metrics.sharpe_ratio,
                     "rsi": analysis.technical_indicators.rsi,
-                    "pe_ratio": analysis.ratios.get('pe_ratio'),
-                    "pb_ratio": analysis.ratios.get('price_to_book')
+                    "pe_ratio": analysis.ratios.get("pe_ratio"),
+                    "pb_ratio": analysis.ratios.get("price_to_book"),
                 }
 
         try:
-            response = self.review_chain.invoke({
-                "report_content": report_content[:4000],  # Limit size
-                "data_summary": json.dumps(data_summary, indent=2)
-            })
+            response = self.review_chain.invoke(
+                {
+                    "report_content": report_content[:4000],  # Limit size
+                    "data_summary": json.dumps(data_summary, indent=2),
+                }
+            )
 
             review_text = response.content.strip()
 
@@ -410,20 +443,33 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
             suggestions = review_json.get("suggestions", [])
             quality_score = review_json.get("quality_score", 7)
 
-            logger.info(f"Review: {len(issues)} issues, {len(suggestions)} suggestions, quality: {quality_score}/10")
+            logger.info(
+                f"Review: {len(issues)} issues, {len(suggestions)} suggestions, quality: {quality_score}/10"
+            )
 
             # Return full review data
             full_review = {
                 "issues": issues,
                 "suggestions": suggestions,
-                "quality_score": quality_score
+                "quality_score": quality_score,
             }
             return issues, quality_score, full_review
 
-        except (json.JSONDecodeError, KeyError, ValueError, TypeError, AttributeError, OSError) as e:
-            logger.warning(f"Review failed: {e}")
-            return [], 7, {"issues": [], "suggestions": [], "quality_score": 7, "error": str(e)}
-    
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            OSError,
+        ) as e:
+            logger.error(f"Review failed: {e}")
+            return (
+                [],
+                7,
+                {"issues": [], "suggestions": [], "quality_score": 7, "error": str(e)},
+            )
+
     def _generate_report_header(self) -> List[str]:
         """Generate report header with timestamp.
 
@@ -431,13 +477,16 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
             List of header lines
         """
         from datetime import datetime, timezone
+
         return [
             "# 📊 Advanced Financial Analysis Report",
             f"*Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}*",
-            ""
+            "",
         ]
 
-    def _generate_executive_summary_section(self, analyses: Dict[str, TickerAnalysis], period: str) -> List[str]:
+    def _generate_executive_summary_section(
+        self, analyses: Dict[str, TickerAnalysis], period: str
+    ) -> List[str]:
         """Generate executive summary section with LLM narrative.
 
         Args:
@@ -448,13 +497,11 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
             List of section lines
         """
         narrative = self.generate_narrative_summary(analyses, period)
-        return [
-            "## 🎯 Executive Summary",
-            narrative,
-            ""
-        ]
+        return ["## 🎯 Executive Summary", narrative, ""]
 
-    def _generate_portfolio_overview_section(self, portfolio_metrics: Optional[PortfolioMetrics]) -> List[str]:
+    def _generate_portfolio_overview_section(
+        self, portfolio_metrics: Optional[PortfolioMetrics]
+    ) -> List[str]:
         """Generate portfolio overview section if available.
 
         Args:
@@ -469,10 +516,12 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         return [
             "## 💼 Portfolio Overview",
             self._generate_portfolio_section(portfolio_metrics),
-            ""
+            "",
         ]
 
-    def _generate_alerts_section(self, analyses: Dict[str, TickerAnalysis]) -> List[str]:
+    def _generate_alerts_section(
+        self, analyses: Dict[str, TickerAnalysis]
+    ) -> List[str]:
         """Generate active alerts section.
 
         Args:
@@ -481,7 +530,12 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         Returns:
             List of section lines (empty if no alerts)
         """
-        all_alerts = [a for analysis in analyses.values() if not analysis.error for a in analysis.alerts]
+        all_alerts = [
+            a
+            for analysis in analyses.values()
+            if not analysis.error
+            for a in analysis.alerts
+        ]
         if not all_alerts:
             return []
 
@@ -491,7 +545,9 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         section.append("")
         return section
 
-    def _generate_failures_section(self, analyses: Dict[str, TickerAnalysis]) -> List[str]:
+    def _generate_failures_section(
+        self, analyses: Dict[str, TickerAnalysis]
+    ) -> List[str]:
         """Generate data quality notes for failed analyses.
 
         Args:
@@ -510,10 +566,13 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         section.append("")
         return section
 
-    def generate_detailed_report(self, analyses: Dict[str, TickerAnalysis],
-                                benchmark_analysis: Optional[TickerAnalysis],
-                                portfolio_metrics: Optional[PortfolioMetrics],
-                                period: str) -> str:
+    def generate_detailed_report(
+        self,
+        analyses: Dict[str, TickerAnalysis],
+        benchmark_analysis: Optional[TickerAnalysis],
+        portfolio_metrics: Optional[PortfolioMetrics],
+        period: str,
+    ) -> str:
         """
         Generates a comprehensive financial report with an LLM-powered narrative.
 
@@ -538,21 +597,7 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         report.extend(self._generate_portfolio_overview_section(portfolio_metrics))
 
         # Key Metrics Table
-        report.append("## 📈 Key Performance Metrics")
-        report.append(self._generate_metrics_table(analyses))
-        report.append("")
-
-        # Methodology note
-        report.append("### Methodology Notes")
-        report.append("- **Return (Daily):** Average daily return calculated from historical price data")
-        report.append("- **Vol (Daily):** Standard deviation of daily returns (annualize: multiply by √252)")
-        report.append("- **Sharpe Ratio:** Risk-adjusted return calculated as (mean daily return - risk-free rate) / daily volatility")
-        report.append("- **Max DD:** Maximum peak-to-trough decline during the analysis period")
-        report.append("- **VaR (95%):** Value at Risk at 95% confidence level (negative value indicates potential loss)")
-        report.append("- **RSI:** Relative Strength Index (0-100 scale; >70 overbought, <30 oversold)")
-        report.append("- **P/E (TTM):** Price-to-Earnings ratio based on trailing twelve months")
-        report.append("- **Rev Growth (YoY):** Year-over-year revenue growth rate")
-        report.append("")
+        report.extend(self._generate_metrics_section(analyses))
 
         # Fundamental Analysis
         report.append("## 📊 Fundamental Analysis")
@@ -581,56 +626,130 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
         report.extend(self._generate_failures_section(analyses))
 
         return "\n".join(report)
-    
+
     def _generate_portfolio_section(self, portfolio_metrics: PortfolioMetrics) -> str:
         """Generate portfolio overview section."""
         lines = []
         lines.append(f"**Total Value:** ${portfolio_metrics.total_value:,.2f}")
-        lines.append(f"**Portfolio Return:** {portfolio_metrics.portfolio_return*100:.2f}%")
-        lines.append(f"**Portfolio Volatility:** {portfolio_metrics.portfolio_volatility*100:.2f}%")
-        
+        lines.append(
+            f"**Portfolio Return:** {portfolio_metrics.portfolio_return*100:.2f}%"
+        )
+        lines.append(
+            f"**Portfolio Volatility:** {portfolio_metrics.portfolio_volatility*100:.2f}%"
+        )
+
         if portfolio_metrics.portfolio_sharpe:
-            lines.append(f"**Portfolio Sharpe Ratio:** {portfolio_metrics.portfolio_sharpe:.2f}")
-        
+            lines.append(
+                f"**Portfolio Sharpe Ratio:** {portfolio_metrics.portfolio_sharpe:.2f}"
+            )
+
         if portfolio_metrics.diversification_ratio:
-            lines.append(f"**Diversification Ratio:** {portfolio_metrics.diversification_ratio:.2f}")
-        
+            lines.append(
+                f"**Diversification Ratio:** {portfolio_metrics.diversification_ratio:.2f}"
+            )
+
         if portfolio_metrics.concentration_risk:
-            lines.append(f"**Concentration Risk (HHI):** {portfolio_metrics.concentration_risk:.3f}")
-        
+            lines.append(
+                f"**Concentration Risk (HHI):** {portfolio_metrics.concentration_risk:.3f}"
+            )
+
         if portfolio_metrics.top_contributors:
             lines.append("\n**Top Contributors:**")
             for ticker, contribution in portfolio_metrics.top_contributors[:3]:
-                lines.append(f"- {ticker}: {contribution*100:.2f}% contribution to return")
-        
+                lines.append(
+                    f"- {ticker}: {contribution*100:.2f}% contribution to return"
+                )
+
         return "\n".join(lines)
-    
+
+    def _generate_metrics_section(self, analyses: Dict[str, TickerAnalysis]) -> List[str]:
+        """Generate complete metrics section with table and methodology notes.
+
+        Args:
+            analyses: All analysis results
+
+        Returns:
+            List of section lines
+        """
+        section = [
+            "## 📈 Key Performance Metrics",
+            self._generate_metrics_table(analyses),
+            "",
+        ]
+
+        section.extend(self._generate_methodology_notes())
+        section.append("")
+
+        return section
+
+    def _generate_methodology_notes(self) -> List[str]:
+        """Generate methodology notes explaining metrics.
+
+        Returns:
+            List of methodology note lines
+        """
+        return [
+            "### Methodology Notes",
+            "- **Return (Daily):** Average daily return calculated from historical price data",
+            "- **Vol (Daily):** Standard deviation of daily returns (annualize: multiply by √252)",
+            "- **Sharpe Ratio:** Risk-adjusted return calculated as (mean daily return - risk-free rate) / daily volatility",
+            "- **Max DD:** Maximum peak-to-trough decline during the analysis period",
+            "- **VaR (95%):** Value at Risk at 95% confidence level (negative value indicates potential loss)",
+            "- **RSI:** Relative Strength Index (0-100 scale; >70 overbought, <30 oversold)",
+            "- **P/E (TTM):** Price-to-Earnings ratio based on trailing twelve months",
+            "- **Rev Growth (YoY):** Year-over-year revenue growth rate",
+        ]
+
     def _generate_metrics_table(self, analyses: Dict[str, TickerAnalysis]) -> str:
         """Generate comprehensive metrics table."""
         table = [
             "| Ticker | Price | Return (Daily) | Vol (Daily) | Sharpe | Max DD | RSI | P/E (TTM) | Rev Growth (YoY) |",
-            "|--------|-------|----------------|-------------|--------|--------|-----|-----------|------------------|"
+            "|--------|-------|----------------|-------------|--------|--------|-----|-----------|------------------|",
         ]
-        
+
         for ticker, analysis in analyses.items():
             if analysis.error:
                 continue
-            
-            m = analysis.advanced_metrics
-            t = analysis.technical_indicators
-            r = analysis.ratios
-            f = analysis.fundamentals
+
+            metrics = analysis.advanced_metrics
+            indicators = analysis.technical_indicators
+            ratios = analysis.ratios
+            fundamentals = analysis.fundamentals
 
             # Safe conversions with NaN checks
-            sharpe_str = f"{m.sharpe_ratio:.2f}" if m.sharpe_ratio is not None and not pd.isna(m.sharpe_ratio) else "N/A"
-            dd_val = m.max_drawdown if m.max_drawdown is not None and not pd.isna(m.max_drawdown) else 0
+            sharpe_str = (
+                f"{metrics.sharpe_ratio:.2f}"
+                if metrics.sharpe_ratio is not None
+                and not pd.isna(metrics.sharpe_ratio)
+                else "N/A"
+            )
+            dd_val = (
+                metrics.max_drawdown
+                if metrics.max_drawdown is not None
+                and not pd.isna(metrics.max_drawdown)
+                else 0
+            )
             dd_str = f"{dd_val*100:.1f}%"
-            rsi_str = f"{t.rsi:.0f}" if t.rsi is not None and not pd.isna(t.rsi) else "N/A"
-            pe_str = f"{r.get('pe_ratio'):.1f}" if r.get('pe_ratio') and not pd.isna(r.get('pe_ratio')) else "N/A"
+            rsi_str = (
+                f"{indicators.rsi:.0f}"
+                if indicators.rsi is not None and not pd.isna(indicators.rsi)
+                else "N/A"
+            )
+            pe_str = (
+                f"{ratios.get('pe_ratio'):.1f}"
+                if ratios.get("pe_ratio") and not pd.isna(ratios.get("pe_ratio"))
+                else "N/A"
+            )
             # Check for valid revenue_growth (not None, not NaN)
-            has_growth = f and f.revenue_growth is not None and not pd.isna(f.revenue_growth)
-            growth_str = f"{f.revenue_growth*100:.1f}%" if has_growth else "N/A"
-            
+            has_growth = (
+                fundamentals
+                and fundamentals.revenue_growth is not None
+                and not pd.isna(fundamentals.revenue_growth)
+            )
+            growth_str = (
+                f"{fundamentals.revenue_growth*100:.1f}%" if has_growth else "N/A"
+            )
+
             table.append(
                 f"| {ticker} | "
                 f"${analysis.latest_close:.2f} | "
@@ -642,102 +761,120 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
                 f"{pe_str} | "
                 f"{growth_str} |"
             )
-        
+
         return "\n".join(table)
-    
+
     def _generate_fundamental_section(self, analyses: Dict[str, TickerAnalysis]) -> str:
         """Generate fundamental analysis section."""
         lines = []
-        
+
         for ticker, analysis in analyses.items():
             if analysis.error or not analysis.fundamentals:
                 continue
-            
-            f = analysis.fundamentals
-            if not any([f.revenue, f.net_income, f.revenue_growth]):
+
+            fundamentals = analysis.fundamentals
+            if not any(
+                [
+                    fundamentals.revenue,
+                    fundamentals.net_income,
+                    fundamentals.revenue_growth,
+                ]
+            ):
                 continue
-            
+
             lines.append(f"### {ticker}")
-            
-            if f.revenue:
-                lines.append(f"- **Revenue:** ${f.revenue/1e9:.2f}B")
-            if f.net_income:
-                lines.append(f"- **Net Income:** ${f.net_income/1e9:.2f}B")
-            if f.revenue_growth:
-                lines.append(f"- **Revenue Growth (YoY):** {f.revenue_growth*100:.1f}%")
-            if f.earnings_growth:
-                lines.append(f"- **Earnings Growth (YoY):** {f.earnings_growth*100:.1f}%")
-            if f.free_cash_flow:
-                lines.append(f"- **Free Cash Flow:** ${f.free_cash_flow/1e9:.2f}B")
-            
+
+            if fundamentals.revenue:
+                lines.append(f"- **Revenue:** ${fundamentals.revenue/1e9:.2f}B")
+            if fundamentals.net_income:
+                lines.append(f"- **Net Income:** ${fundamentals.net_income/1e9:.2f}B")
+            if fundamentals.revenue_growth:
+                lines.append(
+                    f"- **Revenue Growth (YoY):** {fundamentals.revenue_growth*100:.1f}%"
+                )
+            if fundamentals.earnings_growth:
+                lines.append(
+                    f"- **Earnings Growth (YoY):** {fundamentals.earnings_growth*100:.1f}%"
+                )
+            if fundamentals.free_cash_flow:
+                lines.append(
+                    f"- **Free Cash Flow:** ${fundamentals.free_cash_flow/1e9:.2f}B"
+                )
+
             lines.append("")
-        
+
         return "\n".join(lines) if lines else "Limited fundamental data available."
-    
+
     def _generate_individual_analysis(self, analyses: Dict[str, TickerAnalysis]) -> str:
         """Generate individual stock sections."""
         sections = []
-        
+
         for ticker, analysis in analyses.items():
             if analysis.error:
                 continue
-            
+
             sections.append(f"### {ticker}")
             sections.append(f"**Current Price:** ${analysis.latest_close:.2f}")
-            sections.append(f"**Performance:** {analysis.avg_daily_return*100:.3f}% avg daily return")
-            
-            m = analysis.advanced_metrics
-            if m.sharpe_ratio:
-                sections.append(f"**Risk-Adjusted Returns:** Sharpe {m.sharpe_ratio:.2f}")
-            
-            r = analysis.ratios
-            if r.get('pe_ratio'):
-                sections.append(f"**Valuation:** P/E {r['pe_ratio']:.1f}")
-            if r.get('price_to_book'):
-                sections.append(f"**P/B Ratio:** {r['price_to_book']:.2f}")
-            
+            sections.append(
+                f"**Performance:** {analysis.avg_daily_return*100:.3f}% avg daily return"
+            )
+
+            metrics = analysis.advanced_metrics
+            if metrics.sharpe_ratio:
+                sections.append(
+                    f"**Risk-Adjusted Returns:** Sharpe {metrics.sharpe_ratio:.2f}"
+                )
+
+            ratios = analysis.ratios
+            if ratios.get("pe_ratio"):
+                sections.append(f"**Valuation:** P/E {ratios['pe_ratio']:.1f}")
+            if ratios.get("price_to_book"):
+                sections.append(f"**P/B Ratio:** {ratios['price_to_book']:.2f}")
+
             if analysis.alerts:
                 sections.append(f"**⚠️ Alerts:** {', '.join(analysis.alerts)}")
-            
+
             sections.append("")
-        
+
         return "\n".join(sections)
-    
+
     def _generate_risk_analysis(self, analyses: Dict[str, TickerAnalysis]) -> str:
         """Generate risk analysis section."""
         lines = []
-        
+
         for ticker, analysis in analyses.items():
             if analysis.error:
                 continue
-            
-            m = analysis.advanced_metrics
+
+            metrics = analysis.advanced_metrics
             risk_level = "Low"
-            
+
             if analysis.volatility > 0.03:
                 risk_level = "High"
             elif analysis.volatility > 0.02:
                 risk_level = "Moderate"
-            
-            lines.append(f"- **{ticker}:** {risk_level} risk "
-                        f"(Vol: {analysis.volatility*100:.1f}%, "
-                        f"Max DD: {(m.max_drawdown or 0)*100:.1f}%, "
-                        f"VaR 95%: {(m.var_95 or 0)*100:.2f}%)")
-        
+
+            lines.append(
+                f"- **{ticker}:** {risk_level} risk "
+                f"(Vol: {analysis.volatility*100:.1f}%, "
+                f"Max DD: {(metrics.max_drawdown or 0)*100:.1f}%, "
+                f"VaR 95%: {(metrics.var_95 or 0)*100:.2f}%)"
+            )
+
         return "\n".join(lines) if lines else "No risk data available."
-    
+
     def _generate_recommendations(self, analyses: Dict[str, TickerAnalysis]) -> str:
         """Generate investment recommendations."""
         successful = {t: a for t, a in analyses.items() if not a.error}
-        
+
         if not successful:
             return "Insufficient data for recommendations."
-        
+
         # Best Sharpe
         best_sharpe = sorted(
             successful.items(),
             key=lambda x: x[1].advanced_metrics.sharpe_ratio or -999,
-            reverse=True
+            reverse=True,
         )[:3]
 
         recs = ["### Top Risk-Adjusted Performers (by Sharpe Ratio)"]
@@ -750,10 +887,10 @@ Risk metrics varied across the portfolio, with several stocks showing elevated v
 
     def __del__(self) -> None:
         """Cleanup: Close HTTP client when object is destroyed."""
-        if hasattr(self, 'llm') and hasattr(self.llm, 'client'):
+        if hasattr(self, "llm") and hasattr(self.llm, "client"):
             try:
                 # Close the httpx client to clean up connections
-                if hasattr(self.llm.client, 'close'):
+                if hasattr(self.llm.client, "close"):
                     self.llm.client.close()
                 logger.debug("Closed LLM HTTP client connection pool")
             except Exception:

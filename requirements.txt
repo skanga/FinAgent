@@ -1,25 +1,25 @@
 # Core dependencies
-pandas>=2.0.0
-numpy>=1.24.0
-yfinance>=0.2.28
+pandas>=2.3.1
+numpy>=2.2.6
+yfinance>=0.2.66
 
 # HTTP clients with connection pooling
-requests>=2.31.0
-httpx>=0.25.0
-urllib3>=2.0.0
+requests>=2.32.5
+httpx>=0.28.1
+urllib3>=2.5.0
 
 # Retry logic with exponential backoff
-tenacity>=8.0.0
+tenacity>=9.1.2
 
 # LLM and AI
-langchain-openai>=0.1.0
-langchain-core>=0.2.0
+langchain-openai>=0.3.32
+langchain-core>=0.3.75
 
 # Visualization
-matplotlib>=3.7.0
+matplotlib>=3.10.5
 
 # Environment configuration
-python-dotenv>=1.0.0
+python-dotenv>=1.1.1
 
 # Type checking (optional, for development)
 # mypy>=1.0.0

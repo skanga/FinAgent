@@ -8,7 +8,7 @@ This index helps you find the right documentation for your needs.
 
 ## 📖 Core Documentation
 
-### [README.md](README.md) - **START HERE**
+### [README.md](../README.md) - **START HERE**
 **Purpose:** Main entry point, quick start guide, and overview
 **When to read:** First time setup, basic usage
 **Topics:**
@@ -67,7 +67,7 @@ This index helps you find the right documentation for your needs.
 
 ## 🛠️ Development Documentation
 
-### [CLAUDE.md](CLAUDE.md) - **Development Guide**
+### [CLAUDE.md](../CLAUDE.md) - **Development Guide**
 **Purpose:** Guide for developers and Claude Code users
 **When to read:** Contributing to the project, understanding code patterns
 **Topics:**
@@ -105,7 +105,7 @@ This index helps you find the right documentation for your needs.
 ### I want to...
 
 #### **Get Started**
-→ Read [README.md](README.md)
+→ Read [README.md](../README.md)
 → Follow Quick Start section
 → Install dependencies and run first analysis
 
@@ -150,8 +150,8 @@ This index helps you find the right documentation for your needs.
 → Set environment variables
 
 #### **Contribute Code**
-→ Read [CLAUDE.md](CLAUDE.md)
-→ Read [README.md](README.md) > Contributing
+→ Read [CLAUDE.md](../CLAUDE.md)
+→ Read [README.md](../README.md) > Contributing
 → Review code patterns and conventions
 
 #### **Run Tests**
@@ -177,14 +177,14 @@ This index helps you find the right documentation for your needs.
 #### **Add New Features**
 → Read [ARCHITECTURE.md](ARCHITECTURE.md) > Extensibility Points
 → Follow patterns for indicators, providers, charts
-→ Read [CLAUDE.md](CLAUDE.md) for development guide
+→ Read [CLAUDE.md](../CLAUDE.md) for development guide
 
 ---
 
 ## 📊 Documentation Map by Topic
 
 ### Configuration
-- **Basic:** [README.md](README.md) > Configuration
+- **Basic:** [README.md](../README.md) > Configuration
 - **Advanced:** [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md)
 - **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md) > Configuration Architecture
 
@@ -195,7 +195,7 @@ This index helps you find the right documentation for your needs.
 - **Connection Pooling:** [ARCHITECTURE.md](ARCHITECTURE.md) > Performance Optimizations > Connection Pooling
 
 ### Error Handling
-- **Troubleshooting:** [README.md](README.md) > Troubleshooting
+- **Troubleshooting:** [README.md](../README.md) > Troubleshooting
 - **Retry Logic:** [RETRY_BEHAVIOR.md](RETRY_BEHAVIOR.md)
 - **Error Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md) > Error Handling Architecture
 
@@ -205,14 +205,15 @@ This index helps you find the right documentation for your needs.
 - **AWS Lambda:** [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md) > Production Deployment > AWS Lambda
 
 ### Development
-- **Overview:** [CLAUDE.md](CLAUDE.md)
+- **Overview:** [CLAUDE.md](../CLAUDE.md)
 - **Testing:** [TESTING_QUICK_START.md](TESTING_QUICK_START.md)
-- **Contributing:** [README.md](README.md) > Contributing
+- **Contributing:** [README.md](../README.md) > Contributing
 - **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ### Features
 - **Comparative Analysis:** [FEATURE_COMPARATIVE_ANALYSIS.md](FEATURE_COMPARATIVE_ANALYSIS.md)
-- **All Features:** [README.md](README.md) > Features
+- **Options Analysis:** [OPTIONS_IMPLEMENTATION_COMPLETE.md](OPTIONS_IMPLEMENTATION_COMPLETE.md)
+- **All Features:** [README.md](../README.md) > Features
 
 ---
 
@@ -224,9 +225,12 @@ This index helps you find the right documentation for your needs.
 | ARCHITECTURE.md | ✅ Current | 2024 | 100% |
 | CONFIG_EXAMPLES.md | ✅ Current | 2024 | 100% |
 | RETRY_BEHAVIOR.md | ✅ Current | 2024 | 100% |
-| CLAUDE.md | ✅ Current | 2024 | 95% |
+| CLAUDE.md | ✅ Current | 2024 | 100% |
 | TESTING_QUICK_START.md | ✅ Current | 2024 | 90% |
 | FEATURE_COMPARATIVE_ANALYSIS.md | ✅ Current | 2024 | 90% |
+| OPTIONS_IMPLEMENTATION_COMPLETE.md | ✅ Current | 2025 | 100% |
+| CACHE_ENHANCEMENT.md | ✅ Current | 2025 | 100% |
+| REVIEW_FIX.md | ✅ Current | 2025 | 100% |
 
 ---
 
@@ -251,7 +255,7 @@ If you find outdated documentation:
 ## 🎓 Learning Path
 
 ### Beginner
-1. [README.md](README.md) - Get familiar with basics
+1. [README.md](../README.md) - Get familiar with basics
 2. Try Quick Start examples
 3. Read [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md) for your LLM provider
 
@@ -261,7 +265,7 @@ If you find outdated documentation:
 3. [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md) - Advanced configuration
 
 ### Advanced
-1. [CLAUDE.md](CLAUDE.md) - Development patterns
+1. [CLAUDE.md](../CLAUDE.md) - Development patterns
 2. [ARCHITECTURE.md](ARCHITECTURE.md) - Deep dive into all components
 3. [TESTING_QUICK_START.md](TESTING_QUICK_START.md) - Test infrastructure
 4. [FEATURE_COMPARATIVE_ANALYSIS.md](FEATURE_COMPARATIVE_ANALYSIS.md) - Feature design
@@ -277,6 +281,3 @@ If you find outdated documentation:
 - **tenacity Documentation:** https://tenacity.readthedocs.io/
 
 ---
-
-**Last Updated:** 2024
-**Maintained by:** Financial Reporting Agent Team

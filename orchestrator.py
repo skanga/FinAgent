@@ -14,9 +14,10 @@ from fetcher import CachedDataFetcher
 from datetime import datetime, timezone
 from charts import ThreadSafeChartGenerator
 from llm_interface import IntegratedLLMInterface
+from html_generator import HTMLGenerator
 from typing import List, Dict, Optional, Tuple, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from analyzers import AdvancedFinancialAnalyzer, PortfolioAnalyzer
+from analyzers import AdvancedFinancialAnalyzer, PortfolioAnalyzer, PortfolioOptionsAnalyzer
 from models import (
     TickerAnalysis,
     TechnicalIndicators,
@@ -27,6 +28,16 @@ from models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Options-related imports (conditional to avoid errors if not used)
+try:
+    from options_fetcher import OptionsDataFetcher
+    from options_analyzer import OptionsAnalyzer
+    from models_options import TickerOptionsAnalysis
+    OPTIONS_AVAILABLE = True
+except ImportError:
+    OPTIONS_AVAILABLE = False
+    logger.warning("Options modules not available - options analysis disabled")
 
 
 class FinancialReportOrchestrator:
@@ -54,6 +65,22 @@ class FinancialReportOrchestrator:
         self.chart_gen = ThreadSafeChartGenerator()
         self.alert_system = AlertSystem()
         self.llm = IntegratedLLMInterface(config)
+        self.html_gen = HTMLGenerator(config)
+
+        # Initialize options-related analyzers if available
+        if OPTIONS_AVAILABLE:
+            self.options_fetcher = OptionsDataFetcher(
+                self.cache, timeout=config.request_timeout
+            )
+            self.options_analyzer = OptionsAnalyzer(risk_free_rate=config.risk_free_rate)
+            self.portfolio_options_analyzer = PortfolioOptionsAnalyzer(
+                risk_free_rate=config.risk_free_rate
+            )
+            logger.info("Options analysis modules initialized")
+        else:
+            self.options_fetcher = None
+            self.options_analyzer = None
+            self.portfolio_options_analyzer = None
 
     def _validate_output_path(self, output_dir: str) -> Path:
         """Validate and sanitize output directory path to prevent path traversal."""
@@ -112,6 +139,8 @@ class FinancialReportOrchestrator:
         period: str,
         output_dir: Path,
         benchmark_returns: Optional[pd.Series] = None,
+        include_options: bool = False,
+        options_expirations: int = 3,
     ) -> TickerAnalysis:
         """
         Performs a comprehensive analysis of a single ticker.
@@ -177,6 +206,12 @@ class FinancialReportOrchestrator:
                 bollinger_upper=safe_float(last_row["bollinger_upper"]),
                 bollinger_lower=safe_float(last_row["bollinger_lower"]),
                 bollinger_position=safe_float(last_row["bollinger_position"]),
+                atr=safe_float(last_row["atr"]),
+                obv=safe_float(last_row["obv"]),
+                # vwap removed: not appropriate for daily data
+                ma_200d=safe_float(last_row["200d_ma"]),
+                stochastic_k=safe_float(last_row["stochastic_k"]),
+                stochastic_d=safe_float(last_row["stochastic_d"]),
             )
 
             # Compute financial ratios and parse fundamentals
@@ -210,6 +245,19 @@ class FinancialReportOrchestrator:
 
             # Check alerts
             analysis.alerts = self.alert_system.check_alerts(analysis)
+
+            # Add options analysis if requested and available
+            if include_options and OPTIONS_AVAILABLE and self.options_fetcher:
+                try:
+                    options_analysis = self._analyze_options_for_ticker(
+                        ticker, latest_close, volatility, options_expirations, output_dir
+                    )
+                    analysis.options_analysis = options_analysis
+                    logger.info(f"Options analysis complete for {ticker}")
+                except Exception as opt_error:
+                    logger.warning(f"Options analysis failed for {ticker}: {opt_error}")
+                    # Don't fail the whole analysis if options fails
+                    analysis.options_analysis = None
 
             return analysis
 
@@ -247,6 +295,147 @@ class FinancialReportOrchestrator:
                     print(f"  [!] {ticker}: Unexpected Error - {type(e).__name__}")
 
             return self._create_error_analysis(ticker, error_msg)
+
+    def _analyze_options_for_ticker(
+        self,
+        ticker: str,
+        spot_price: float,
+        historical_volatility: float,
+        num_expirations: int,
+        output_dir: Path,
+    ) -> TickerOptionsAnalysis:
+        """
+        Analyze options for a single ticker.
+
+        Args:
+            ticker: Ticker symbol
+            spot_price: Current stock price
+            historical_volatility: Historical volatility from stock analysis
+            num_expirations: Number of expirations to analyze
+            output_dir: Output directory for charts
+
+        Returns:
+            TickerOptionsAnalysis with all options data
+        """
+        from datetime import datetime, timezone
+
+        logger.info(f"Fetching options data for {ticker}")
+
+        # Fetch options chains
+        chains = self.options_fetcher.fetch_multiple_expirations(ticker, num_expirations)
+
+        if not chains:
+            raise ValueError(f"No options chains available for {ticker}")
+
+        # Enrich chains with Greeks
+        for chain in chains:
+            self.options_analyzer.enrich_chain_with_greeks(chain, calculate_iv=False)
+
+        # Analyze IV
+        iv_analysis = self.options_analyzer.analyze_implied_volatility(
+            chains, historical_volatility, ticker
+        )
+
+        # Detect strategies
+        strategies = self.options_analyzer.detect_all_strategies(chains, existing_shares=0)
+
+        # Sort strategies by probability of profit
+        strategies.sort(
+            key=lambda s: s.probability_of_profit if s.probability_of_profit else 0,
+            reverse=True,
+        )
+
+        # Select top strategies
+        top_strategies = strategies[:5]
+
+        # Generate charts
+        chart_paths = {}
+
+        try:
+            # 1. Options chain heatmap (volume)
+            heatmap_path = output_dir / f"{ticker}_options_heatmap.png"
+            self.chart_gen.create_options_chain_heatmap(chains, heatmap_path, metric="volume")
+            chart_paths["heatmap"] = heatmap_path
+        except Exception as e:
+            logger.warning(f"Failed to create options heatmap: {e}")
+
+        try:
+            # 2. Greeks visualization
+            greeks_path = output_dir / f"{ticker}_greeks.png"
+            self.chart_gen.create_greeks_visualization(chains[0], spot_price, greeks_path)
+            chart_paths["greeks"] = greeks_path
+        except Exception as e:
+            logger.warning(f"Failed to create Greeks visualization: {e}")
+
+        try:
+            # 3. P&L diagram for top strategy
+            if top_strategies:
+                pnl_path = output_dir / f"{ticker}_pnl_diagram.png"
+                self.chart_gen.create_pnl_diagram(top_strategies[0], pnl_path)
+                chart_paths["pnl"] = pnl_path
+        except Exception as e:
+            logger.warning(f"Failed to create P&L diagram: {e}")
+
+        try:
+            # 4. IV surface
+            iv_surface_path = output_dir / f"{ticker}_iv_surface.png"
+            self.chart_gen.create_iv_surface(chains, ticker, iv_surface_path)
+            chart_paths["iv_surface"] = iv_surface_path
+        except Exception as e:
+            logger.warning(f"Failed to create IV surface: {e}")
+
+        # Generate LLM narratives
+        executive_summary = ""
+        strategy_recommendations = ""
+
+        try:
+            options_analysis_temp = TickerOptionsAnalysis(
+                ticker=ticker,
+                underlying_price=spot_price,
+                analysis_date=datetime.now(timezone.utc),
+                chains=chains,
+                iv_analysis=iv_analysis,
+                strategies=strategies,
+                top_strategies=top_strategies,
+            )
+
+            executive_summary = self.llm.generate_options_narrative(
+                ticker, options_analysis_temp, spot_price
+            )
+
+            market_context = {
+                "iv": iv_analysis.current_iv,
+                "iv_vs_hv": iv_analysis.iv_vs_hv_ratio,
+                "historical_vol": historical_volatility,
+            }
+
+            strategy_recommendations = self.llm.generate_options_recommendations(
+                ticker, top_strategies, market_context, "None"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate LLM narratives: {e}")
+
+        # Build final TickerOptionsAnalysis
+        options_analysis = TickerOptionsAnalysis(
+            ticker=ticker,
+            underlying_price=spot_price,
+            analysis_date=datetime.now(timezone.utc),
+            chains=chains,
+            iv_analysis=iv_analysis,
+            strategies=strategies,
+            top_strategies=top_strategies,
+            chain_heatmap_path=chart_paths.get("heatmap"),
+            greeks_chart_path=chart_paths.get("greeks"),
+            pnl_diagram_path=chart_paths.get("pnl"),
+            iv_surface_path=chart_paths.get("iv_surface"),
+            total_contracts=sum(len(c.all_contracts) for c in chains),
+            total_volume=sum(c.total_call_volume + c.total_put_volume for c in chains),
+            total_open_interest=sum(c.total_call_oi + c.total_put_oi for c in chains),
+            executive_summary=executive_summary,
+            strategy_recommendations=strategy_recommendations,
+        )
+
+        return options_analysis
 
     def run_from_natural_language(
         self, user_request: str, output_dir: str = "./reports"
@@ -312,6 +501,8 @@ class FinancialReportOrchestrator:
         period: str,
         output_path: Path,
         benchmark_returns: Optional[pd.Series],
+        include_options: bool = False,
+        options_expirations: int = 3,
     ) -> Dict[str, TickerAnalysis]:
         """Analyze all tickers concurrently with progress tracking.
 
@@ -339,37 +530,51 @@ class FinancialReportOrchestrator:
             # Submit all ticker analysis tasks
             future_to_ticker = {
                 executor.submit(
-                    self.analyze_ticker, ticker, period, output_path, benchmark_returns
+                    self.analyze_ticker, ticker, period, output_path, benchmark_returns,
+                    include_options, options_expirations
                 ): ticker
                 for ticker in tickers
             }
 
-            # Process completed futures as they finish
-            for future in as_completed(future_to_ticker):
-                ticker = future_to_ticker[future]
-                try:
-                    analysis = future.result()
-                    analyses[ticker] = analysis
-                    progress.update(ticker, not analysis.error)
-                except Exception as e:
-                    # Handle unexpected exceptions from worker threads
-                    logger.error(f"Unexpected error analyzing {ticker}: {e}")
-                    error_analysis = TickerAnalysis(
-                        ticker=ticker,
-                        csv_path=Path(),
-                        chart_path=Path(),
-                        latest_close=0.0,
-                        avg_daily_return=0.0,
-                        volatility=0.0,
-                        ratios={},
-                        fundamentals=None,
-                        advanced_metrics=AdvancedMetrics(),
-                        technical_indicators=TechnicalIndicators(),
-                        sample_data=[],
-                        error=f"Thread error: {str(e)}",
-                    )
-                    analyses[ticker] = error_analysis
-                    progress.update(ticker, False)
+            try:
+                # Process completed futures as they finish
+                for future in as_completed(future_to_ticker):
+                    ticker = future_to_ticker[future]
+                    try:
+                        analysis = future.result()
+                        analyses[ticker] = analysis
+                        progress.update(ticker, not analysis.error)
+                    except Exception as e:
+                        # Handle unexpected exceptions from worker threads
+                        logger.error(f"Unexpected error analyzing {ticker}: {e}")
+                        error_analysis = TickerAnalysis(
+                            ticker=ticker,
+                            csv_path=Path(),
+                            chart_path=Path(),
+                            latest_close=0.0,
+                            avg_daily_return=0.0,
+                            volatility=0.0,
+                            ratios={},
+                            fundamentals=None,
+                            advanced_metrics=AdvancedMetrics(),
+                            technical_indicators=TechnicalIndicators(),
+                            sample_data=[],
+                            error=f"Thread error: {str(e)}",
+                        )
+                        analyses[ticker] = error_analysis
+                        progress.update(ticker, False)
+
+            except KeyboardInterrupt:
+                # Handle Ctrl+C gracefully - cancel pending tasks
+                logger.warning("Analysis interrupted by user, cancelling pending tasks...")
+                for future in future_to_ticker:
+                    future.cancel()
+                progress.complete()
+                raise
+            finally:
+                # Ensure all threads complete before exiting context manager
+                # The context manager already calls shutdown(wait=True), but we make it explicit
+                executor.shutdown(wait=True, cancel_futures=False)
 
         progress.complete()
         return analyses
@@ -476,6 +681,7 @@ class FinancialReportOrchestrator:
         portfolio_metrics: Optional[PortfolioMetrics],
         period: str,
         output_path: Path,
+        comparison_chart_path: Optional[Path] = None,
     ) -> Tuple[str, List[str], int]:
         """Generate report with LLM and review quality.
 
@@ -491,7 +697,7 @@ class FinancialReportOrchestrator:
         """
         print("\n📝 Generating report with AI insights...")
         report_content = self.llm.generate_detailed_report(
-            analyses, benchmark_analysis, portfolio_metrics, period
+            analyses, benchmark_analysis, portfolio_metrics, period, comparison_chart_path
         )
 
         print("🔍 Reviewing report quality...")
@@ -542,6 +748,31 @@ class FinancialReportOrchestrator:
 
         logger.info(f"Report saved: {report_path}")
         return report_path, timestamp
+
+    def _generate_html_report(
+        self, markdown_path: Path, embed_images: bool = False
+    ) -> Optional[Path]:
+        """Generate HTML version of the report.
+
+        Args:
+            markdown_path: Path to markdown report
+            embed_images: Whether to embed images as base64
+
+        Returns:
+            Path to HTML report or None if generation failed
+        """
+        try:
+            print("\n🌐 Generating HTML report...")
+            html_path = self.html_gen.generate_html_report(
+                markdown_path=markdown_path,
+                embed_images=embed_images,
+            )
+            print("✓ HTML report generated")
+            return html_path
+        except Exception as e:
+            logger.error(f"HTML generation failed: {e}")
+            print(f"⚠️  HTML generation failed: {e}")
+            return None
 
     def _collect_performance_metrics(
         self,
@@ -603,6 +834,8 @@ class FinancialReportOrchestrator:
         tickers = request.tickers
         period = request.period
         portfolio_weights = request.weights
+        include_options = request.include_options
+        options_expirations = request.options_expirations
 
         # Setup
         output_path = self._validate_output_path(output_dir)
@@ -611,6 +844,8 @@ class FinancialReportOrchestrator:
 
         logger.info("=" * 60)
         logger.info("Starting Advanced Financial Report Generation")
+        if include_options:
+            logger.info("Options analysis ENABLED")
         logger.info("=" * 60)
 
         # Fetch benchmark
@@ -620,7 +855,8 @@ class FinancialReportOrchestrator:
 
         # Analyze tickers
         analyses = self._analyze_all_tickers(
-            tickers, period, output_path, benchmark_returns
+            tickers, period, output_path, benchmark_returns,
+            include_options, options_expirations
         )
         successful, failed = self._process_analysis_results(analyses)
 
@@ -632,13 +868,27 @@ class FinancialReportOrchestrator:
         # Generate charts
         chart_files = self._generate_comparison_charts(successful, output_path)
 
+        # Find comparison chart if it was created
+        comparison_chart = None
+        if len(successful) >= 2:
+            comparison_chart = output_path / "comparison_chart.png"
+            if not comparison_chart.exists():
+                comparison_chart = None
+
         # Generate and review report
         report_content, review_issues, quality_score = self._generate_and_review_report(
-            analyses, benchmark_analysis, portfolio_metrics, period, output_path
+            analyses, benchmark_analysis, portfolio_metrics, period, output_path, comparison_chart
         )
 
         # Save report
         report_path, timestamp = self._save_report(report_content, output_path)
+
+        # Generate HTML report if enabled
+        html_path = None
+        if self.config.generate_html:
+            html_path = self._generate_html_report(
+                report_path, self.config.embed_images_in_html
+            )
 
         # Collect performance metrics
         performance_metrics = self._collect_performance_metrics(
@@ -655,6 +905,7 @@ class FinancialReportOrchestrator:
 
         return ReportMetadata(
             final_markdown_path=report_path,
+            final_html_path=html_path,
             charts=chart_files,
             analyses=analyses,
             portfolio_metrics=portfolio_metrics,

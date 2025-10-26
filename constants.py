@@ -26,6 +26,10 @@ class AnalysisThresholds:
     OVERBOUGHT_RSI = 70  # Above this indicates overbought conditions
     OVERSOLD_RSI = 30  # Below this indicates oversold conditions
 
+    # Stochastic Oscillator thresholds
+    OVERBOUGHT_STOCHASTIC = 80  # Above this indicates overbought conditions
+    OVERSOLD_STOCHASTIC = 20  # Below this indicates oversold conditions
+
     # VaR threshold
     VALUE_AT_RISK_95_THRESHOLD = -0.03  # VaR 95% threshold for alerts
 
@@ -42,6 +46,7 @@ class TechnicalIndicatorParameters:
     # Moving Averages
     MA_SHORT_PERIOD = 30  # 30-day moving average (short-term trend)
     MA_LONG_PERIOD = 50  # 50-day moving average (long-term trend)
+    MA_VERY_LONG_PERIOD = 200  # 200-day moving average (very long-term trend)
     VOLATILITY_WINDOW = 20  # Rolling window for volatility calculation
 
     # Bollinger Bands
@@ -52,6 +57,13 @@ class TechnicalIndicatorParameters:
     MACD_FAST_PERIOD = 12  # Fast EMA period
     MACD_SLOW_PERIOD = 26  # Slow EMA period
     MACD_SIGNAL_PERIOD = 9  # Signal line EMA period
+
+    # ATR (Average True Range)
+    ATR_PERIOD = 14  # Standard ATR calculation period
+
+    # Stochastic Oscillator
+    STOCHASTIC_K_PERIOD = 14  # %K period (fast stochastic)
+    STOCHASTIC_D_PERIOD = 3  # %D period (slow stochastic, signal line)
 
 
 class TimeConstants:
@@ -126,11 +138,56 @@ class DataValidation:
     MIN_QUARTERS_FOR_GROWTH = 5  # Need at least 5 quarters (current + 4 back)
 
 
+class OptionsAnalysisParameters:
+    """Options analysis calculation parameters and thresholds."""
+
+    # Greeks calculation
+    GREEKS_METHOD = "bsm"  # "bsm" (Black-Scholes-Merton) or "binomial"
+    BINOMIAL_STEPS = 100  # Number of steps for binomial tree (for American options)
+    MIN_TIME_TO_EXPIRATION = 1.0 / 365.0  # Minimum T (1 day) to avoid division by zero in Greeks
+
+    # IV calculation
+    IV_SOLVER_METHOD = "newton"  # "newton" (Newton-Raphson) or "bisection"
+    IV_SOLVER_MAX_ITERATIONS = 100
+    IV_SOLVER_TOLERANCE = 1e-6
+    IV_MIN = 0.01  # Minimum IV (1%)
+    IV_MAX = 5.0   # Maximum IV (500%)
+
+    # Strategy detection thresholds
+    MAX_SPREAD_WIDTH = 0.20  # Maximum spread width as % of underlying (20%)
+    MIN_CONTRACTS_FOR_STRATEGY = 1  # Minimum contracts to identify as strategy
+    MAX_LEGS_PER_STRATEGY = 4  # Maximum legs for complex strategies
+
+    # ATM definition
+    ATM_THRESHOLD = 0.05  # Strike within 5% of spot is considered ATM
+
+    # Moneyness thresholds
+    DEEP_ITM_THRESHOLD = 1.10  # 10% in-the-money
+    DEEP_OTM_THRESHOLD = 0.90  # 10% out-of-the-money
+
+    # P&L simulation
+    PNL_PRICE_RANGE_STD_DEVS = 3  # ±3 standard deviations for P&L range
+    PNL_SIMULATION_POINTS = 100  # Number of price points for P&L diagram
+    MONTE_CARLO_SIMULATIONS = 10000  # Number of Monte Carlo paths
+
+    # Visualization
+    HEATMAP_RESOLUTION = (12, 8)  # Width, height in inches
+    HEATMAP_DPI = 150
+    IV_SURFACE_RESOLUTION = (14, 10)
+    IV_SURFACE_SMOOTHING = True
+
+    # Risk metrics
+    MIN_BREAKEVEN_PRICE = 0.01  # Minimum price for breakeven calculation
+    MAX_LOSS_CAP = 1000000  # Cap for undefined risk strategies ($1M)
+
+
 class Defaults:
     """Default configuration values."""
 
     # Cache defaults (can be overridden by config)
     CACHE_TTL_HOURS = 24  # Default cache time-to-live
+    OPTIONS_CACHE_TTL_HOURS = 1  # Shorter TTL for options (more volatile)
+    PORTFOLIO_CACHE_MAX_SIZE = 100  # Maximum number of portfolio combinations to cache
 
     # Risk-free rate (can be overridden by config)
     RISK_FREE_RATE = 0.02  # 2% annual risk-free rate
@@ -147,6 +204,10 @@ class Defaults:
     # Report quality scoring
     MIN_QUALITY_SCORE = 0  # Minimum quality score
     MAX_QUALITY_SCORE = 10  # Maximum quality score
+
+    # Options analysis defaults
+    DEFAULT_OPTIONS_EXPIRATIONS = 3  # Number of expirations to analyze
+    INCLUDE_OPTIONS_BY_DEFAULT = False  # Options analysis off by default
 
 
 # ============================================================================
@@ -222,6 +283,7 @@ def get_all_constants() -> dict:
         LimitsAndConstraints,
         ChartConfiguration,
         DataValidation,
+        OptionsAnalysisParameters,
         Defaults,
     ]
 

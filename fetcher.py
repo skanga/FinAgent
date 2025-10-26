@@ -9,6 +9,7 @@ from requests import Session
 from cache import CacheManager
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+from utils import validate_ticker_symbol
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -115,7 +116,8 @@ class CachedDataFetcher:
             ValueError: If ticker is invalid or has insufficient data
             OSError: If network errors persist after retries
         """
-        ticker = ticker.strip().upper()
+        # Validate and normalize ticker using centralized validation
+        ticker = validate_ticker_symbol(ticker)
 
         # Try cache first
         cached_data = self.cache.get(ticker, period, "prices")

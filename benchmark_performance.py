@@ -108,7 +108,7 @@ def benchmark_cache_serialization():
 
             # Read
             start = time.perf_counter()
-            df_loaded = pd.read_pickle(Path(temp_dir) / "test.pkl")
+            _ = pd.read_pickle(Path(temp_dir) / "test.pkl")  # Load data to measure read time
             pickle_times_read.append(time.perf_counter() - start)
 
         # Test parquet
@@ -122,7 +122,7 @@ def benchmark_cache_serialization():
 
             # Read
             start = time.perf_counter()
-            df_loaded = pd.read_parquet(Path(temp_dir) / "test.parquet")
+            _ = pd.read_parquet(Path(temp_dir) / "test.parquet")  # Load data to measure read time
             parquet_times_read.append(time.perf_counter() - start)
 
         # Get file sizes
@@ -180,7 +180,7 @@ def benchmark_dataframe_reuse():
 
         returns_df = pd.DataFrame(returns_data).dropna()
         weights_array = np.array([0.33, 0.33, 0.34])
-        portfolio_returns = returns_df.values @ weights_array
+        _ = returns_df.values @ weights_array  # Calculate returns to measure performance
 
         elapsed = time.perf_counter() - start
         times_create_new.append(elapsed)
@@ -195,7 +195,7 @@ def benchmark_dataframe_reuse():
         start = time.perf_counter()
 
         # Reuse pre-created structures
-        portfolio_returns = returns_df_cached.values @ weights_array_cached
+        _ = returns_df_cached.values @ weights_array_cached  # Calculate returns to measure performance
 
         elapsed = time.perf_counter() - start
         times_reuse.append(elapsed)

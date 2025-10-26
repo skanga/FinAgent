@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a financial reporting agent that generates comprehensive financial analysis reports using AI. It combines market data fetching (via yfinance), technical/fundamental analysis, portfolio metrics, and LLM-powered narrative generation to produce markdown reports.
+This is a financial reporting agent that generates comprehensive financial analysis reports using AI. It combines market data fetching (via yfinance), technical/fundamental analysis, **options analysis (Greeks, IV, strategies)**, portfolio metrics, and LLM-powered narrative generation to produce markdown and HTML reports.
 
 ## Architecture
 
@@ -24,12 +24,15 @@ The application follows a pipeline architecture coordinated by `FinancialReportO
 **Orchestrator** (orchestrator.py): Main coordinator that runs the full analysis pipeline. The `run()` method (orchestrator.py:128) is the primary entry point.
 
 **Data Layer**:
-- `CachedDataFetcher` (fetcher.py): Wraps yfinance API calls with intelligent caching
-- `CacheManager` (cache.py): Pickle-based cache with TTL (default 24h), keyed by ticker+period+data_type
+- `CachedDataFetcher` (fetcher.py): Wraps yfinance API calls for stock data with intelligent caching
+- `OptionsDataFetcher` (options_fetcher.py): Wraps yfinance options API with caching (TTL: 1h)
+- `CacheManager` (cache.py): **Dual-format cache** - Parquet for DataFrames, Pickle for Python objects (lists, dataclasses). Stock data TTL: 24h, Options TTL: 1h
 
 **Analysis Layer**:
-- `AdvancedFinancialAnalyzer` (analyzers.py:15): Computes technical indicators (RSI, MACD, Bollinger Bands), risk metrics (Sharpe, Sortino, Calmar, Treynor, VaR, max drawdown), and parses fundamentals from yfinance quarterly statements
+- `AdvancedFinancialAnalyzer` (analyzers.py:15): Computes technical indicators (RSI, MACD, Bollinger Bands, Stochastic), risk metrics (Sharpe, Sortino, Calmar, Treynor, VaR, max drawdown), and parses fundamentals from yfinance quarterly statements
 - `PortfolioAnalyzer` (analyzers.py:251): Calculates portfolio-level metrics including diversification ratio, correlation matrix, concentration risk (Herfindahl index), and return attribution
+- `OptionsAnalyzer` (options_analyzer.py): Calculates Greeks (Black-Scholes-Merton), solves for IV (Newton-Raphson + Brent's), detects 18+ strategies, generates P&L scenarios
+- `PortfolioOptionsAnalyzer` (analyzers.py): Aggregates portfolio-level Greeks, generates hedging recommendations, analyzes concentration risk
 
 **LLM Integration** (llm_interface.py):
 - Uses LangChain with ChatOpenAI
@@ -61,6 +64,9 @@ Configuration is loaded from environment variables via `Config.from_env()` (conf
 - `MAX_WORKERS` (default: 3)
 - `CACHE_TTL_HOURS` (default: 24)
 - `BENCHMARK_TICKER` (default: SPY)
+- `GENERATE_HTML` (default: true) - Enable/disable HTML report generation
+- `EMBED_IMAGES_IN_HTML` (default: false) - Embed images as base64 in HTML
+- `OPEN_IN_BROWSER` (default: true) - Prompt to open HTML report in browser (default: yes)
 
 All values have validation in `__post_init__()`.
 
@@ -87,6 +93,30 @@ python main.py --tickers TSLA,NVDA --period 6mo --output ./my_reports
 python main.py
 ```
 
+**HTML Report Options:**
+```bash
+# Disable HTML generation (markdown only)
+python main.py --tickers AAPL --no-html
+
+# Don't open in browser automatically
+python main.py --tickers AAPL --no-browser
+
+# Embed images as base64 (single-file HTML)
+python main.py --tickers AAPL --embed-images
+```
+
+**Options Analysis:**
+```bash
+# Enable options analysis
+python main.py --tickers AAPL --options
+
+# Analyze more expirations (default: 3, max: 10)
+python main.py --tickers SPY --options --options-expirations 5
+
+# Portfolio with options
+python main.py --tickers AAPL,MSFT --period 1y --options
+```
+
 **Utility commands:**
 ```bash
 # Clear cache
@@ -97,6 +127,43 @@ python main.py --verbose -t AAPL -p 1y
 ```
 
 **Valid periods:** 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+
+## Testing
+
+The project includes 600+ comprehensive tests organized in the `tests/` directory:
+
+**Running Tests:**
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_analyzers_unit.py -v
+
+# Run by category
+pytest tests/ -m unit              # Fast unit tests
+pytest tests/ -m integration       # Integration tests
+pytest tests/ -m "not slow"        # Skip slow tests
+
+# With coverage
+pytest tests/ --cov=. --cov-report=html
+```
+
+**Test Organization:**
+- `tests/conftest.py` - Shared fixtures (configs, mock data, temp directories)
+- `tests/test_*.py` - Test modules (26 files, 600+ tests total)
+- Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`, `@pytest.mark.network`, `@pytest.mark.llm`
+
+**Key Test Files:**
+- `test_analyzers_unit.py` - Financial metrics calculations
+- `test_llm_interface.py` - LLM integration and prompts
+- `test_orchestrator.py` - End-to-end workflow tests
+- `test_options_fetcher.py` - Options data fetching
+- `test_html_generation.py` - HTML report generation
+- `test_memory_leaks.py` - Memory profiling
+- `test_performance.py` - Performance benchmarks
+
+See `docs/TESTING_QUICK_START.md` for detailed testing guide and `pytest.ini` for configuration.
 
 ## Development Notes
 
@@ -114,6 +181,8 @@ python main.py --verbose -t AAPL -p 1y
 
 **Report structure:** Generated markdown always includes: Executive Summary (LLM), Portfolio Overview, Key Metrics Table, Fundamental Analysis, Detailed Stock Analysis, Risk Analysis, Recommendations, Active Alerts, and Data Quality Notes.
 
+**HTML report generation:** By default, reports are generated in both markdown and HTML formats. HTML reports use a professional, responsive template with styled charts and tables. After generation, the user is prompted to open the HTML report in their browser (press Enter to accept, or type 'n' to skip). This can be disabled with `--no-browser`. HTML generation uses a custom regex-based markdown parser (html_generator.py) with no additional dependencies. Images can be embedded as base64 or referenced relatively.
+
 ## Important Implementation Details
 
 **yfinance data structure:** The fetcher expects yfinance history DataFrames with Date, Open, High, Low, Close, Volume columns. It resets the index to make Date a column and adds a ticker column.
@@ -127,3 +196,58 @@ python main.py --verbose -t AAPL -p 1y
 **LLM retry logic:** Natural language parsing retries up to `max_retries` times (default 3). Handles both JSON parse errors and validation errors. See llm_interface.py:101.
 
 **Progress tracking:** Uses `ProgressTracker` (utils.py) for long-running operations, displaying elapsed time, current item, and ETA.
+
+## Options Analysis Feature
+
+**Architecture:** Options analysis is **optional** and disabled by default (no performance impact when not used).
+
+**Data Models** (models_options.py):
+- `OptionsContract`: Single options contract with strike, expiration, prices, Greeks
+- `OptionsChain`: Complete chain for one expiration (calls + puts)
+- `OptionsStrategy`: Detected strategy with legs, P&L, risk metrics
+- `TickerOptionsAnalysis`: Complete options analysis for a ticker
+- `PortfolioOptionsMetrics`: Portfolio-level aggregated Greeks
+
+**Greeks Calculation** (options_analyzer.py):
+- Uses Black-Scholes-Merton model for European-style options
+- Calculates Delta, Gamma, Theta, Vega, Rho with dollar equivalents
+- Fast, accurate for typical equity options analysis
+
+**IV Solver** (options_analyzer.py):
+- Newton-Raphson method (fast convergence, typically <10 iterations)
+- Falls back to Brent's method if Newton-Raphson fails
+- Handles edge cases (deep ITM/OTM, near expiration)
+
+**Strategy Detection** (options_analyzer.py):
+- Pattern-based detection (not ML-based)
+- Detects 18+ strategies: long/short calls/puts, straddles/strangles, vertical/horizontal/diagonal spreads, iron condors, butterflies, calendar spreads
+- Extensible via `detect_all_strategies()` method
+
+**Caching Behavior:**
+- Options chains cached for 1 hour (configurable via `OPTIONS_CACHE_TTL_HOURS`)
+- Separate from stock data cache (which uses 24h TTL)
+- Uses Pickle format (not Parquet) for OptionsChain objects
+
+**Visualizations** (charts.py):
+- Options chain heatmaps (volume/OI/IV across strikes and expirations)
+- Greeks visualization (multi-panel Delta/Gamma/Theta/Vega charts)
+- P&L diagrams (payoff curves with breakevens and profit zones)
+- IV surface/skew plots (3D surface or 2D skew)
+
+**LLM Integration:**
+- Three new prompts: options narrative, strategy recommendations, portfolio hedging
+- Temperature: 0.3 for consistency
+- Includes specific numbers (strikes, premiums, Greeks) in narratives
+
+**Adding Options Support:**
+1. Enable via `--options` flag or `INCLUDE_OPTIONS=true` env var
+2. Orchestrator checks `portfolio_request.include_options` flag
+3. If enabled, runs `_analyze_options_for_ticker()` for each ticker
+4. Results stored in `ticker_analysis.options_analysis`
+5. Portfolio-level aggregation in `PortfolioOptionsAnalyzer`
+
+**Performance:**
+- Typical analysis time: 10-15 seconds per ticker (first run)
+- With caching: 5-7 seconds per ticker (subsequent runs)
+- Concurrent analysis with ThreadPoolExecutor (default: 3 workers)
+- Graceful degradation: Individual ticker options failures don't abort run

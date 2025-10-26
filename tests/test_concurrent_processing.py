@@ -57,7 +57,7 @@ class TestConcurrentProcessing:
         thread_tracker = {}
         tracker_lock = Lock()
 
-        def mock_analyze_ticker(self, ticker, period, output_path, benchmark_returns):
+        def mock_analyze_ticker(self, ticker, period, output_path, benchmark_returns, include_options=False, options_expirations=3):
             """Mock analyze_ticker that tracks thread usage"""
             thread_id = current_thread().name
 
@@ -126,7 +126,7 @@ class TestConcurrentProcessing:
         from pathlib import Path
 
         def mock_analyze_ticker_with_errors(
-            self, ticker, period, output_path, benchmark_returns
+            self, ticker, period, output_path, benchmark_returns, include_options=False, options_expirations=3
         ):
             """Mock that fails for some tickers"""
             time.sleep(0.05)

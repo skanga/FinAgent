@@ -47,6 +47,13 @@ class Config:
         max_workers: int = None,
         risk_free_rate: float = None,
         benchmark_ticker: str = None,
+        generate_html: bool = None,
+        embed_images_in_html: bool = None,
+        open_in_browser: bool = None,
+        # Options-related parameters
+        include_options: bool = None,
+        options_cache_ttl_hours: int = None,
+        options_expirations: int = None,
     ):
         """Initialize configuration, loading from environment variables if not specified."""
         # Load from environment variables with defaults
@@ -117,6 +124,52 @@ class Config:
             else os.getenv("BENCHMARK_TICKER", Defaults.BENCHMARK_TICKER)
         )
 
+        # HTML generation settings
+        if generate_html is not None:
+            self.generate_html = generate_html
+        else:
+            env_val = os.getenv("GENERATE_HTML", "true").lower()
+            self.generate_html = env_val in ("true", "1", "yes", "on")
+
+        if embed_images_in_html is not None:
+            self.embed_images_in_html = embed_images_in_html
+        else:
+            env_val = os.getenv("EMBED_IMAGES_IN_HTML", "false").lower()
+            self.embed_images_in_html = env_val in ("true", "1", "yes", "on")
+
+        if open_in_browser is not None:
+            self.open_in_browser = open_in_browser
+        else:
+            env_val = os.getenv("OPEN_IN_BROWSER", "true").lower()
+            self.open_in_browser = env_val in ("true", "1", "yes", "on")
+
+        # Options analysis settings
+        if include_options is not None:
+            self.include_options = include_options
+        else:
+            env_val = os.getenv("INCLUDE_OPTIONS", "false").lower()
+            self.include_options = env_val in ("true", "1", "yes", "on")
+
+        if options_cache_ttl_hours is not None:
+            self.options_cache_ttl_hours = options_cache_ttl_hours
+        else:
+            try:
+                self.options_cache_ttl_hours = int(
+                    os.getenv("OPTIONS_CACHE_TTL_HOURS", str(Defaults.OPTIONS_CACHE_TTL_HOURS))
+                )
+            except ValueError:
+                self.options_cache_ttl_hours = Defaults.OPTIONS_CACHE_TTL_HOURS
+
+        if options_expirations is not None:
+            self.options_expirations = options_expirations
+        else:
+            try:
+                self.options_expirations = int(
+                    os.getenv("OPTIONS_EXPIRATIONS", str(Defaults.DEFAULT_OPTIONS_EXPIRATIONS))
+                )
+            except ValueError:
+                self.options_expirations = Defaults.DEFAULT_OPTIONS_EXPIRATIONS
+
         # Computed field
         self.provider = None
 
@@ -161,6 +214,18 @@ class Config:
                     return "openai"
                 case d if "anthropic" in d:
                     return "anthropic"
+                case d if "groq" in d:
+                    return "groq"
+                case d if "cerebras" in d:
+                    return "cerebras"
+                case d if "sambanova" in d:
+                    return "sambanova"
+                case d if "inception" in d:
+                    return "inception"
+                case d if "openrouter" in d:
+                    return "openrouter"
+                case d if "gemini" in d:
+                    return "google"
                 case d if "generativelanguage.googleapis.com" in d:
                     return "google"
                 case d if "localhost" in d or "127.0.0.1" in d:
@@ -176,14 +241,26 @@ class Config:
         # Compute provider from URL
         self.provider = self._get_provider_from_url()
 
-        # Skip API key validation if None or empty (for testing)
-        # Empty string is treated as None/not set
-        if (
-            self.openai_api_key is not None
-            and self.openai_api_key != ""
-            and not self.openai_api_key
-        ):
+        # Validate API key is not empty string (but allow None for testing)
+        if self.openai_api_key is not None and self.openai_api_key == "":
             raise ValueError("OPENAI_API_KEY cannot be empty string")
+
+        # Validate base URL is a valid URL
+        if self.openai_base_url:
+            try:
+                parsed = urlparse(self.openai_base_url)
+                if not parsed.scheme or not parsed.netloc:
+                    raise ValueError(
+                        f"OPENAI_BASE_URL must be a valid URL with scheme and host. Got: {self.openai_base_url}"
+                    )
+                if parsed.scheme not in ("http", "https"):
+                    raise ValueError(
+                        f"OPENAI_BASE_URL must use http or https scheme. Got: {parsed.scheme}"
+                    )
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    raise
+                raise ValueError(f"Invalid OPENAI_BASE_URL: {e}") from e
 
         # Allow wider ranges for testing purposes
         if not (1 <= self.max_retries <= 10):
@@ -223,24 +300,20 @@ class Config:
         """
         Loads the configuration from environment variables.
 
+        This is a convenience method that validates the API key is set,
+        then delegates to __init__() which handles all environment variable
+        loading and validation.
+
         Returns:
             Config: The configuration object.
+
+        Raises:
+            ValueError: If OPENAI_API_KEY environment variable is not set.
         """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable must be set")
 
-        try:
-            max_workers = int(os.getenv("MAX_WORKERS", "3"))
-            cache_ttl = int(os.getenv("CACHE_TTL_HOURS", "24"))
-        except ValueError as e:
-            raise ValueError(f"Invalid integer in environment variables: {e}")
-
-        return cls(
-            openai_api_key=api_key,
-            openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            model_name=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            max_workers=max_workers,
-            cache_ttl_hours=cache_ttl,
-            benchmark_ticker=os.getenv("BENCHMARK_TICKER", "SPY"),
-        )
+        # Simply call __init__() with no arguments - it will load everything from env vars
+        # This eliminates code duplication since __init__() already handles all env var loading
+        return cls()

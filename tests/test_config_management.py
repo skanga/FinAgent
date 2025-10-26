@@ -206,10 +206,9 @@ class TestEdgeCases:
     )
     def test_empty_string_api_key(self):
         """Test handling of empty string API key."""
-        config = Config()
-
-        # Empty string should be treated as None or kept as empty
-        assert config.openai_api_key == "" or config.openai_api_key is None
+        # Empty strings should be rejected (validation now works correctly)
+        with pytest.raises(ValueError, match="OPENAI_API_KEY cannot be empty string"):
+            _ = Config()  # Should raise ValueError
 
 
 class TestConfigValues:

@@ -8,14 +8,17 @@
 ## 🌟 Features
 
 ### Core Capabilities
-- **📈 Technical Analysis**: RSI, MACD, Bollinger Bands, Moving Averages, Volatility
+- **📈 Technical Analysis**: RSI, MACD, Bollinger Bands, Stochastic, Moving Averages, Volatility
 - **💰 Fundamental Analysis**: P/E ratios, revenue growth, earnings, cash flow, margins
 - **📊 Portfolio Analytics**: Diversification ratio, correlation matrix, Sharpe ratio, max drawdown
+- **🎯 Options Analysis**: Greeks (Delta/Gamma/Theta/Vega/Rho), IV analysis, strategy detection, P&L modeling
 - **🤖 AI-Powered Insights**: LLM-generated narratives and investment recommendations
 - **📉 Advanced Metrics**: Alpha, Beta, Sortino, Calmar, Treynor, Information Ratio
 - **🔔 Smart Alerts**: Automated detection of overbought/oversold conditions
-- **💾 Intelligent Caching**: Reduces API calls with configurable TTL
+- **💾 Intelligent Caching**: Reduces API calls with configurable TTL (dual-format: Parquet + Pickle)
 - **📝 Natural Language Requests**: "Analyze tech stocks over 6 months"
+- **🌐 HTML Reports**: Professional, responsive HTML reports with embedded charts
+- **🚀 Browser Launch**: Optional browser opening with user confirmation (security best practice)
 
 ### Performance & Quality
 - **🚀 Optimized Operations**: Vectorized DataFrame operations for speed
@@ -44,17 +47,17 @@
 
 ## 📚 Additional Documentation
 
-> **[📑 Documentation Index](DOCUMENTATION_INDEX.md)** - Complete navigation guide to all documentation
+> **[📑 Documentation Index](docs/README.md)** - Complete navigation guide to all documentation
 
 ### Core Guides
-- **[Architecture Guide](ARCHITECTURE.md)** - Complete system design with diagrams, concurrency model, and connection pooling
-- **[Configuration Examples](CONFIG_EXAMPLES.md)** - LLM providers, performance tuning, and deployment (Docker, K8s, Lambda)
-- **[Retry Behavior](RETRY_BEHAVIOR.md)** - Network resilience, error handling, and troubleshooting
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - Complete system design with diagrams, concurrency model, and connection pooling
+- **[Configuration Examples](docs/CONFIG_EXAMPLES.md)** - LLM providers, performance tuning, and deployment (Docker, K8s, Lambda)
+- **[Retry Behavior](docs/RETRY_BEHAVIOR.md)** - Network resilience, error handling, and troubleshooting
 
 ### Development
 - **[Development Guide](CLAUDE.md)** - For contributors and Claude Code users
-- **[Testing Guide](TESTING_QUICK_START.md)** - How to run tests
-- **[Feature Docs](FEATURE_COMPARATIVE_ANALYSIS.md)** - Comparative analysis feature
+- **[Testing Guide](docs/TESTING_QUICK_START.md)** - How to run tests
+- **[Feature Docs](docs/FEATURE_COMPARATIVE_ANALYSIS.md)** - Comparative analysis feature
 
 ---
 
@@ -76,9 +79,12 @@ cp .env.example .env
 
 # 4. Run your first analysis
 python main.py --tickers AAPL,MSFT,GOOGL --period 1y
+
+# 5. (Optional) Include options analysis
+python main.py --tickers AAPL --period 1y --options
 ```
 
-Your report will be generated in `./financial_reports/` with charts, metrics, and AI insights!
+The application will prompt you to open the HTML report in your browser. Press Enter (or type 'y') to view the report with charts, metrics, and AI insights! Markdown and data files are also saved in `./financial_reports/`.
 
 ---
 
@@ -108,11 +114,8 @@ pip install -r requirements.txt
 # Optionally install type checking
 pip install mypy
 
-# Run tests
-python test_memory_leaks.py
-python test_performance.py
-python test_yoy_refactor.py
-python test_env_loading.py
+# Run tests (all tests are now in tests/ directory)
+pytest tests/ -v
 ```
 
 ### Dependencies
@@ -130,7 +133,7 @@ python test_env_loading.py
 
 ## ⚙️ Configuration
 
-> **📖 For extensive configuration examples and deployment scenarios, see [CONFIG_EXAMPLES.md](CONFIG_EXAMPLES.md)**
+> **📖 For extensive configuration examples and deployment scenarios, see [CONFIG_EXAMPLES.md](docs/CONFIG_EXAMPLES.md)**
 
 ### Environment Variables
 
@@ -170,6 +173,24 @@ CACHE_TTL_HOURS=24
 
 # Benchmark for comparison (default: SPY)
 BENCHMARK_TICKER=SPY
+
+# HTML report generation (default: true)
+GENERATE_HTML=true
+
+# Embed images as base64 in HTML (default: false)
+EMBED_IMAGES_IN_HTML=false
+
+# Prompt to open reports in browser (default: true, press Enter to accept)
+OPEN_IN_BROWSER=true
+
+# Options analysis (default: false)
+INCLUDE_OPTIONS=false
+
+# Options cache TTL in hours (default: 1)
+OPTIONS_CACHE_TTL_HOURS=1
+
+# Number of options expirations to analyze (default: 3, max: 10)
+OPTIONS_EXPIRATIONS=3
 ```
 
 #### Configuration Validation
@@ -253,6 +274,47 @@ python main.py --tickers AAPL --period 1y --clear-cache
 python main.py --tickers AAPL --period 1y --verbose
 ```
 
+#### HTML Report Options
+
+```bash
+# Disable HTML generation (markdown only)
+python main.py --tickers AAPL --period 1y --no-html
+
+# Don't open in browser automatically
+python main.py --tickers AAPL --period 1y --no-browser
+
+# Embed images as base64 (single-file HTML, larger size)
+python main.py --tickers AAPL --period 1y --embed-images
+
+# Combine options
+python main.py --tickers AAPL,MSFT --period 6mo --embed-images --no-browser
+```
+
+#### Options Analysis
+
+```bash
+# Enable options analysis for a single ticker
+python main.py --tickers AAPL --period 1y --options
+
+# Analyze more expiration dates (default: 3, max: 10)
+python main.py --tickers SPY --period 6mo --options --options-expirations 5
+
+# Portfolio with options analysis
+python main.py --tickers AAPL,MSFT,GOOGL --period 1y --options
+
+# Combined with other flags
+python main.py --tickers AAPL --period 3mo --options --embed-images --verbose
+```
+
+**What you get with --options:**
+- **Greeks Analysis**: Delta, Gamma, Theta, Vega, Rho for all contracts
+- **IV Analysis**: Implied volatility skew, term structure, IV vs HV comparison
+- **Strategy Detection**: 18+ strategies (straddles, spreads, condors, butterflies, etc.)
+- **P&L Modeling**: Breakeven points, max profit/loss, probability of profit
+- **Portfolio Greeks**: Aggregate exposure across all positions
+- **Visualizations**: Options chain heatmaps, Greeks charts, P&L diagrams, IV surfaces
+- **AI Recommendations**: LLM-generated strategy suggestions and hedging advice
+
 ### Natural Language Requests
 
 Use natural language to specify your analysis:
@@ -304,33 +366,46 @@ python main.py --help | grep -A 20 "Examples:"
 
 ## 🏗️ Architecture
 
-> **📖 For detailed architecture documentation with diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md)**
+> **📖 For detailed architecture documentation with diagrams, see [ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
 ### Project Structure
 
 ```
 financial_reporting_agent/
 ├── config.py              # Configuration management with .env support
-├── models.py              # Data models and type definitions
-├── cache.py               # Parquet-based caching system
-├── fetcher.py             # yfinance data fetching wrapper
+├── models.py              # Stock data models and type definitions
+├── models_options.py      # Options data models (9 dataclasses)
+├── constants.py           # Application constants and parameters
+├── cache.py               # Dual-format caching (Parquet + Pickle)
+├── fetcher.py             # yfinance stock data fetching
+├── options_fetcher.py     # yfinance options data fetching
 ├── analyzers.py           # Financial metrics computation
 │   ├── AdvancedFinancialAnalyzer
-│   └── PortfolioAnalyzer
-├── charts.py              # Matplotlib chart generation
+│   ├── PortfolioAnalyzer
+│   └── PortfolioOptionsAnalyzer
+├── options_analyzer.py    # Options Greeks, IV, and strategy detection
+├── charts.py              # Matplotlib chart generation (stock + options)
 ├── llm_interface.py       # LLM integration for narratives
+├── html_generator.py      # HTML report generation
 ├── alerts.py              # Alert detection system
 ├── utils.py               # Utility functions
 ├── orchestrator.py        # Main coordination logic
 ├── main.py                # CLI entry point
+├── templates/             # HTML templates
+│   └── report_template.html
+├── tests/                 # Test suite (600+ tests)
+│   ├── conftest.py        # Shared test fixtures
+│   └── test_*.py          # Test modules
 ├── requirements.txt       # Python dependencies
+├── requirements-dev.txt   # Development dependencies
+├── pytest.ini             # Pytest configuration
 ├── .env.example           # Configuration template
 ├── .gitignore             # Git exclusions
 └── README.md              # This file
 
 Generated directories:
-├── .cache/                # Cached price data (Parquet format)
-└── financial_reports/     # Generated reports and charts
+├── .cache/                # Cached data (Parquet for DataFrames, Pickle for objects)
+└── financial_reports/     # Generated reports (HTML, MD) and charts
 ```
 
 ### Component Overview
@@ -347,10 +422,12 @@ Generated directories:
 - Timeout protection (configurable)
 
 #### 3. **Caching (`cache.py`)**
-- **Format**: Apache Parquet (secure, efficient)
-- **TTL**: Configurable expiration (1-168 hours)
-- **Security**: Path traversal protection
-- **Performance**: Compression with Snappy
+- **Dual-Format Support**:
+  - Parquet for pandas DataFrames (stock prices, fundamentals)
+  - Pickle for Python objects (options chains, expirations)
+- **TTL**: Configurable expiration (stock: 24h default, options: 1h default)
+- **Security**: Path traversal protection, MD5-based keys
+- **Performance**: Snappy compression for Parquet
 - **Storage**: `.cache/` directory
 
 #### 4. **Financial Analysis (`analyzers.py`)**
@@ -368,17 +445,46 @@ Generated directories:
 - Top contributors analysis
 - Concentration risk (Herfindahl index)
 
+**PortfolioOptionsAnalyzer**:
+- Aggregate portfolio Greeks (Delta, Vega, Theta)
+- Cross-position hedging recommendations
+- Greeks concentration risk
+- Vega/Delta/Theta balancing suggestions
+
+#### 4.5. **Options Analysis (`options_analyzer.py`, `options_fetcher.py`)**
+- **Greeks Calculation**: Black-Scholes-Merton for Delta, Gamma, Theta, Vega, Rho
+- **IV Solver**: Newton-Raphson with Brent's method fallback
+- **Strategy Detection**: 18+ patterns (straddles, spreads, condors, butterflies, etc.)
+- **P&L Modeling**: Breakeven calculation, max profit/loss, probability of profit
+- **IV Analysis**: Skew detection, term structure, IV vs historical volatility
+- **Caching**: TTL-based caching of options chains (1 hour default)
+
 #### 5. **Visualization (`charts.py`)**
-- Price charts with technical overlays
-- Comparison charts (normalized returns)
-- Risk-reward scatter plots
-- Memory-optimized with explicit cleanup
+- **Stock Charts**: Price with technical overlays, comparison charts, risk-reward scatter
+- **Options Charts**:
+  - Options chain heatmaps (volume, OI, IV)
+  - Greeks visualization (Delta, Gamma, Theta, Vega)
+  - P&L diagrams with breakeven points
+  - IV surface/skew plots (3D and 2D)
+- **Thread-safe**: Agg backend for concurrent generation
+- **Memory-optimized**: Explicit cleanup with figure closing
 
 #### 6. **LLM Integration (`llm_interface.py`)**
 - Natural language request parsing
-- Comprehensive narrative generation
+- Comprehensive narrative generation (stock + options)
+- **Options-specific narratives**:
+  - IV assessment and opportunities
+  - Strategy recommendations with rationale
+  - Portfolio hedging analysis
 - Report quality review and scoring
 - Temperature-controlled for consistency
+- Chart embedding in markdown reports
+
+#### 6.5. **HTML Generation (`html_generator.py`)**
+- Markdown-to-HTML conversion (no external dependencies)
+- Professional, responsive template
+- Chart embedding (relative paths or base64)
+- Print-friendly styling
 
 #### 7. **Orchestration (`orchestrator.py`)**
 - Coordinates all components
@@ -402,8 +508,14 @@ Orchestrator
 └─────────────┴───────────────┴──────────────┘
     ↓               ↓               ↓
 Cache (.parquet)  Charts (.png)  Report (.md)
-    ↓
-Output Directory (./financial_reports/)
+    ↓                               ↓
+    │                          HTML Generator
+    │                               ↓
+    └─────────────→  Output Directory (./financial_reports/)
+                     ├── report.html ⭐ Prompt to open in browser
+                     ├── report.md
+                     ├── charts.png (embedded in reports)
+                     └── data.csv
 ```
 
 ---
@@ -414,7 +526,18 @@ Output Directory (./financial_reports/)
 
 Each analysis generates:
 
-#### 1. **Markdown Report** (`financial_report_YYYYMMDDTHHMMSSZ.md`)
+#### 1. **HTML Report** (`financial_report_YYYYMMDDTHHMMSSZ.html`)
+
+**Primary output format** - prompts to open in your browser (press Enter):
+- Professional, responsive design
+- Embedded technical charts with analysis
+- Styled tables and metrics
+- Print-friendly layout
+- Works on desktop, tablet, and mobile
+
+#### 2. **Markdown Report** (`financial_report_YYYYMMDDTHHMMSSZ.md`)
+
+**Source format** for the HTML report:
 
 ```markdown
 # Financial Analysis Report
@@ -423,12 +546,18 @@ Generated: 2024-01-15 14:30:00 UTC
 ## Executive Summary
 [AI-generated overview of findings]
 
+## Technical Charts
+### Portfolio Comparison
+![Portfolio Comparison](comparison_chart.png)
+
+### AAPL Technical Analysis
+![AAPL Technical Chart](AAPL_technical.png)
+
 ## Individual Stock Analysis
 ### AAPL
 - Latest Price: $185.50
 - Sharpe Ratio: 1.45
 - Max Drawdown: -12.5%
-- [Charts and metrics]
 
 ## Portfolio Analysis
 - Total Value: $10,000
@@ -443,15 +572,17 @@ Generated: 2024-01-15 14:30:00 UTC
 [Detailed analysis and recommendations]
 ```
 
-#### 2. **Charts** (PNG format)
+#### 3. **Charts** (PNG format)
 
 For each ticker:
-- `{TICKER}_technical.png`: Price, moving averages, Bollinger Bands, RSI
+- `{TICKER}_technical.png`: Price, moving averages, Bollinger Bands, RSI, Stochastic
 
 For portfolio:
 - `comparison_chart.png`: Normalized returns comparison
 
-#### 3. **Data Files** (CSV format)
+Charts are automatically embedded in both HTML and markdown reports.
+
+#### 4. **Data Files** (CSV format)
 
 For each ticker:
 - `{TICKER}_prices.csv`: Full historical data with computed indicators
@@ -482,14 +613,15 @@ python main.py --tickers AAPL,MSFT,GOOGL --period 1y
 You'll get:
 ```
 financial_reports/
+├── financial_report_20240115T143000Z.html    ⭐ Prompt to open in browser
 ├── financial_report_20240115T143000Z.md
-├── AAPL_technical.png
+├── AAPL_technical.png                         📊 Embedded in reports
 ├── AAPL_prices.csv
-├── MSFT_technical.png
+├── MSFT_technical.png                         📊 Embedded in reports
 ├── MSFT_prices.csv
-├── GOOGL_technical.png
+├── GOOGL_technical.png                        📊 Embedded in reports
 ├── GOOGL_prices.csv
-└── comparison_chart.png
+└── comparison_chart.png                       📊 Embedded in reports
 ```
 
 ---
@@ -568,20 +700,24 @@ OPENAI_MODEL=llama2
 
 ### Running Tests
 
-The project includes comprehensive test suites:
+The project includes 600+ comprehensive tests in the `tests/` directory:
 
 ```bash
-# Test memory management
-python test_memory_leaks.py
+# Run all tests
+pytest tests/ -v
 
-# Test performance optimizations
-python test_performance.py
+# Run specific test file
+pytest tests/test_memory_leaks.py -v
 
-# Test code refactoring
-python test_yoy_refactor.py
+# Run tests by category
+pytest tests/ -m unit              # Fast unit tests
+pytest tests/ -m integration       # Integration tests
+pytest tests/ -m "not slow"        # Skip slow tests
 
-# Test .env file loading
-python test_env_loading.py
+# Run with coverage
+pytest tests/ --cov=. --cov-report=html
+
+# See TESTING_QUICK_START.md for more options
 ```
 
 ### Code Quality
@@ -638,7 +774,7 @@ Explicit garbage collection ✓
 
 ## 🐛 Troubleshooting
 
-> **📖 For detailed retry behavior and network error handling, see [RETRY_BEHAVIOR.md](RETRY_BEHAVIOR.md)**
+> **📖 For detailed retry behavior and network error handling, see [RETRY_BEHAVIOR.md](docs/RETRY_BEHAVIOR.md)**
 
 ### Common Issues
 
@@ -743,7 +879,7 @@ If you encounter issues:
 4. Check the [Issues](issues) section
 5. Verify your configuration with:
    ```bash
-   python test_env_loading.py
+   pytest tests/test_env_loading.py -v
    ```
 
 ---
@@ -776,10 +912,7 @@ cp .env.example .env
 # Add your API key
 
 # 5. Run tests
-python test_memory_leaks.py
-python test_performance.py
-python test_yoy_refactor.py
-python test_env_loading.py
+pytest tests/ -v
 ```
 
 ### Code Style
@@ -860,7 +993,17 @@ SOFTWARE.
 
 ## 🗺️ Roadmap
 
-Future enhancements planned:
+### Recently Completed ✅
+- [x] HTML report generation with professional styling
+- [x] Chart embedding in reports (markdown + HTML)
+- [x] Auto-launch reports in browser
+- [x] Responsive design for mobile/tablet/desktop
+- [x] **Options Analytics** (Greeks, IV, strategies, P&L modeling, portfolio hedging)
+- [x] Dual-format caching (Parquet + Pickle)
+- [x] Stochastic oscillator indicator
+- [x] LLM quality review system
+
+### Future Enhancements
 
 - [ ] Additional Data Sources (not only yfinance)
 - [ ] Real-time data streaming
@@ -870,11 +1013,16 @@ Future enhancements planned:
 - [ ] Web interface (Flask/FastAPI)
 - [ ] Database persistence (PostgreSQL/SQLite)
 - [ ] Additional chart types (candlesticks, volume analysis)
-- [ ] Options analytics
+- [ ] Interactive charts (Plotly integration)
 - [ ] News sentiment integration
 - [ ] PDF report generation
 - [ ] Multi-currency support
 - [ ] ESG metrics integration
+- [ ] Dark mode for HTML reports
+- [ ] More options strategies (ratio spreads, box spreads, synthetic positions)
+- [ ] Historical IV percentile tracking
+- [ ] Earnings calendar integration for options
+- [ ] American options pricing (binomial trees)
 
 ---
 

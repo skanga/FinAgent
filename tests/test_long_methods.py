@@ -50,11 +50,16 @@ class TestOrchestrator:
         self.config.request_timeout = 30
         self.config.model_name = "gpt-4o"
         self.config.risk_free_rate = 0.02
+        self.config.generate_html = True
+        self.config.embed_images_in_html = False
+        self.config.open_in_browser = False
 
         # Create orchestrator
         with patch("orchestrator.IntegratedLLMInterface"), patch(
             "orchestrator.CacheManager"
-        ), patch("orchestrator.ThreadSafeChartGenerator"):
+        ), patch("orchestrator.ThreadSafeChartGenerator"), patch(
+            "orchestrator.HTMLGenerator"
+        ):
             self.orchestrator = FinancialReportOrchestrator(self.config)
 
     def teardown_method(self):
@@ -147,7 +152,7 @@ class TestOrchestrator:
         tickers = ["AAPL", "MSFT", "GOOGL"]
         mock_analyses = {t: self.create_mock_analysis(t) for t in tickers}
 
-        def mock_analyze(ticker, period, output_path, benchmark_returns=None):
+        def mock_analyze(ticker, period, output_path, benchmark_returns=None, include_options=False, options_expirations=3):
             return mock_analyses[ticker]
 
         with patch.object(
@@ -315,8 +320,8 @@ class TestLLMInterface:
         """Create a mock TickerAnalysis object."""
         return TickerAnalysis(
             ticker=ticker,
-            csv_path=f"/tmp/{ticker}.csv",
-            chart_path=f"/tmp/{ticker}.png",
+            csv_path=Path(f"/tmp/{ticker}.csv"),
+            chart_path=Path(f"/tmp/{ticker}.png"),
             latest_close=100.0,
             avg_daily_return=0.001,
             volatility=0.02,
@@ -456,7 +461,7 @@ class TestLLMInterface:
             )
 
         # Verify report structure
-        assert "# 📊 Advanced Financial Analysis Report" in report
+        assert "# 📊 Financial Analysis Report" in report
         assert "## 🎯 Executive Summary" in report
         assert "## 💼 Portfolio Overview" in report
         assert "## 📈 Key Performance Metrics" in report

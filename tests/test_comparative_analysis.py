@@ -36,7 +36,7 @@ def benchmark_returns():
     return returns
 
 
-class TestCACreation:
+class TestComparativeAnalysisCreation:
     """Test that comparative analysis is created correctly."""
 
     def test_create_comparative_analysis_returns_object(
@@ -75,7 +75,7 @@ class TestCACreation:
         assert result is None
 
 
-class TestCAMetrics:
+class TestComparativeAnalysisMetrics:
     """Test that all comparative metrics are calculated."""
 
     def test_all_metrics_are_present(
@@ -129,7 +129,7 @@ class TestCAMetrics:
         assert result.relative_volatility > 0
 
 
-class TestCAEdgeCases:
+class TestComparativeAnalysisEdgeCases:
     """Test edge cases for comparative analysis."""
 
     def test_handles_identical_returns(self, analyzer):
@@ -233,7 +233,7 @@ class TestCAEdgeCases:
         assert result is None
 
 
-class TestCAIntegration:
+class TestComparativeAnalysisIntegration:
     """Test integration with TickerAnalysis."""
 
     def test_comparative_analysis_included_in_ticker_analysis(self):
@@ -269,7 +269,7 @@ class TestCAIntegration:
         assert analysis.comparative_analysis.beta_vs_benchmark == 1.2
 
 
-class TestCAMetricsValues:
+class TestComparativeAnalysisMetricsValues:
     """Test specific metric calculations."""
 
     def test_outperformance_positive_when_ticker_outperforms(self, analyzer):

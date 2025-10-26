@@ -40,30 +40,35 @@ class AlertSystem:
         """
         alerts = []
 
-        # Volatility alerts
-        if analysis.volatility > self.volatility_threshold:
+        # Volatility alerts - check if volatility is not None
+        if analysis.volatility is not None and analysis.volatility > self.volatility_threshold:
             alerts.append(f"High volatility: {analysis.volatility*100:.1f}%")
 
-        # Drawdown alerts
+        # Drawdown alerts - check if advanced_metrics exists and max_drawdown is not None
         if (
-            analysis.advanced_metrics.max_drawdown
+            analysis.advanced_metrics
+            and analysis.advanced_metrics.max_drawdown is not None
             and analysis.advanced_metrics.max_drawdown < self.drawdown_threshold
         ):
             alerts.append(
                 f"Large drawdown: {analysis.advanced_metrics.max_drawdown*100:.1f}%"
             )
 
-        # VaR alerts
+        # VaR alerts - check if advanced_metrics exists and var_95 is not None
         if (
-            analysis.advanced_metrics.var_95
+            analysis.advanced_metrics
+            and analysis.advanced_metrics.var_95 is not None
             and analysis.advanced_metrics.var_95 < AnalysisThresholds.VALUE_AT_RISK_95_THRESHOLD
         ):
             alerts.append(
                 f"High VaR (95%): {analysis.advanced_metrics.var_95*100:.2f}%"
             )
 
-        # RSI alerts
-        if analysis.technical_indicators.rsi:
+        # RSI alerts - check if technical_indicators exists and rsi is not None
+        if (
+            analysis.technical_indicators
+            and analysis.technical_indicators.rsi is not None
+        ):
             if analysis.technical_indicators.rsi > AnalysisThresholds.OVERBOUGHT_RSI:
                 alerts.append(
                     f"Overbought (RSI: {analysis.technical_indicators.rsi:.0f})"
@@ -73,12 +78,25 @@ class AlertSystem:
                     f"Oversold (RSI: {analysis.technical_indicators.rsi:.0f})"
                 )
 
-        # Comparative alerts
+        # Stochastic Oscillator alerts - check if technical_indicators exists and stochastic_k is not None
+        if (
+            analysis.technical_indicators
+            and analysis.technical_indicators.stochastic_k is not None
+        ):
+            if analysis.technical_indicators.stochastic_k > AnalysisThresholds.OVERBOUGHT_STOCHASTIC:
+                alerts.append(
+                    f"Overbought (Stochastic: {analysis.technical_indicators.stochastic_k:.0f})"
+                )
+            elif analysis.technical_indicators.stochastic_k < AnalysisThresholds.OVERSOLD_STOCHASTIC:
+                alerts.append(
+                    f"Oversold (Stochastic: {analysis.technical_indicators.stochastic_k:.0f})"
+                )
+
+        # Comparative alerts - check all objects and attributes exist
         if (
             analysis.comparative_analysis
-            and analysis.comparative_analysis.outperformance
-            and analysis.comparative_analysis.outperformance
-            < AnalysisThresholds.UNDERPERFORMANCE
+            and analysis.comparative_analysis.outperformance is not None
+            and analysis.comparative_analysis.outperformance < AnalysisThresholds.UNDERPERFORMANCE
         ):
             alerts.append(
                 f"Underperforming benchmark: {analysis.comparative_analysis.outperformance*100:.2f}%"

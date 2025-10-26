@@ -4,10 +4,14 @@ Data models for financial analysis.
 
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 from pydantic import BaseModel, Field, field_validator, model_validator
 from constants import LimitsAndConstraints
 from utils import validate_ticker_symbol, validate_ticker_list
+
+# Avoid circular imports
+if TYPE_CHECKING:
+    pass
 
 
 # ============================================================================
@@ -63,13 +67,19 @@ class PortfolioRequest(BaseModel):
 
     tickers: List[str] = Field(
         ...,
-        min_length=1,
+        min_length=1,  # Allow single ticker for individual analysis
         max_length=LimitsAndConstraints.MAX_TICKERS_ALLOWED,
-        description="List of ticker symbols",
+        description="List of ticker symbols (use 2+ for portfolio analysis)",
     )
     period: str = Field(default="1y", description="Analysis period")
     weights: Optional[Dict[str, float]] = Field(
         default=None, description="Portfolio weights (must sum to 1.0)"
+    )
+    include_options: bool = Field(
+        default=False, description="Include options analysis in the report"
+    )
+    options_expirations: int = Field(
+        default=3, ge=1, le=10, description="Number of options expirations to analyze (1-10)"
     )
 
     @field_validator("tickers")
@@ -136,11 +146,12 @@ class PortfolioRequest(BaseModel):
             if weight > 1:
                 raise ValueError(f"Weight for {ticker} cannot exceed 1.0: {weight}")
 
-        # Check sum
+        # Check sum using centralized tolerance constant
         total = sum(self.weights.values())
-        tolerance = 0.01  # Allow 1% deviation
-        if abs(total - 1.0) > tolerance:
-            raise ValueError(f"Weights must sum to 1.0 (±{tolerance}), got {total:.4f}")
+        if abs(total - 1.0) > LimitsAndConstraints.PORTFOLIO_WEIGHT_TOLERANCE:
+            raise ValueError(
+                f"Weights must sum to 1.0 (±{LimitsAndConstraints.PORTFOLIO_WEIGHT_TOLERANCE}), got {total:.4f}"
+            )
 
         return self
 
@@ -180,18 +191,30 @@ class NaturalLanguageRequest(BaseModel):
 
 @dataclass
 class AdvancedMetrics:
-    """Advanced financial risk metrics."""
+    """Advanced financial risk metrics.
 
-    sharpe_ratio: Optional[float] = None
+    Note: All annualized metrics (Sharpe, Sortino, Treynor, Calmar, Information Ratio)
+    are ALREADY annualized. Do not multiply by √252 or any other factor.
+    """
+
+    sharpe_ratio: Optional[float] = None  # ALREADY ANNUALIZED
     max_drawdown: Optional[float] = None
     beta: Optional[float] = None
-    alpha: Optional[float] = None
+    alpha: Optional[float] = None  # ALREADY ANNUALIZED
     r_squared: Optional[float] = None
-    var_95: Optional[float] = None
-    sortino_ratio: Optional[float] = None
-    calmar_ratio: Optional[float] = None
-    treynor_ratio: Optional[float] = None
-    information_ratio: Optional[float] = None
+    var_95: Optional[float] = None  # Daily VaR at 95% confidence
+    sortino_ratio: Optional[float] = None  # ALREADY ANNUALIZED
+    calmar_ratio: Optional[float] = None  # ALREADY ANNUALIZED
+    treynor_ratio: Optional[float] = None  # ALREADY ANNUALIZED
+    information_ratio: Optional[float] = None  # ALREADY ANNUALIZED
+    cvar_95: Optional[float] = None  # Daily CVaR (Expected Shortfall) - tail risk
+    max_drawdown_duration: Optional[int] = None  # Days to recover from max drawdown
+    up_capture: Optional[float] = None  # Up Capture Ratio (vs benchmark), as decimal
+    down_capture: Optional[float] = None  # Down Capture Ratio (vs benchmark), as decimal
+    rolling_sharpe_mean: Optional[float] = None  # Mean of 60-day rolling Sharpe (annualized)
+    rolling_sharpe_std: Optional[float] = None  # Std dev of rolling Sharpe
+    rolling_beta_mean: Optional[float] = None  # Mean of 60-day rolling Beta
+    rolling_beta_std: Optional[float] = None  # Std dev of rolling Beta
 
 
 @dataclass
@@ -217,6 +240,12 @@ class TechnicalIndicators:
     bollinger_upper: Optional[float] = None
     bollinger_lower: Optional[float] = None
     bollinger_position: Optional[float] = None
+    atr: Optional[float] = None  # Average True Range - volatility measure
+    obv: Optional[float] = None  # On-Balance Volume
+    # vwap removed: Not appropriate for daily data (intraday indicator only)
+    ma_200d: Optional[float] = None  # 200-day Moving Average - long-term trend
+    stochastic_k: Optional[float] = None  # Stochastic %K
+    stochastic_d: Optional[float] = None  # Stochastic %D (signal line)
 
 
 @dataclass
@@ -235,6 +264,11 @@ class FundamentalData:
     gross_profit: Optional[float] = None
     operating_income: Optional[float] = None
     ebitda: Optional[float] = None
+    interest_expense: Optional[float] = None  # For interest coverage calculation
+    revenue_cagr_3y: Optional[float] = None  # 3-year revenue CAGR
+    revenue_cagr_5y: Optional[float] = None  # 5-year revenue CAGR
+    earnings_cagr_3y: Optional[float] = None  # 3-year earnings CAGR
+    earnings_cagr_5y: Optional[float] = None  # 5-year earnings CAGR
 
 
 @dataclass
@@ -255,6 +289,7 @@ class TickerAnalysis:
     sample_data: List[Dict[str, Any]] = field(default_factory=list)
     alerts: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    options_analysis: Optional[Any] = None  # TickerOptionsAnalysis, using Any to avoid circular import
 
 
 @dataclass
@@ -272,6 +307,11 @@ class PortfolioMetrics:
     weights: Optional[Dict[str, float]] = None
     top_contributors: Optional[List[Tuple[str, float]]] = None
     concentration_risk: Optional[float] = None
+    portfolio_cvar_95: Optional[float] = None  # Conditional VaR at 95%
+    portfolio_max_dd_duration: Optional[int] = None  # Max drawdown duration in days
+    portfolio_up_capture: Optional[float] = None  # Up Capture Ratio
+    portfolio_down_capture: Optional[float] = None  # Down Capture Ratio
+    options_metrics: Optional[Any] = None  # PortfolioOptionsMetrics, using Any to avoid circular import
 
 
 @dataclass
@@ -301,6 +341,7 @@ class ReportMetadata:
     """Metadata for generated report."""
 
     final_markdown_path: Path
+    final_html_path: Optional[Path]
     charts: List[Path]
     analyses: Dict[str, TickerAnalysis]
     portfolio_metrics: Optional[PortfolioMetrics]

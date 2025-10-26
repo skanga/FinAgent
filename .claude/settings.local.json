@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(done)",
+      "Bash(pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)",
+      "Bash(awk:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

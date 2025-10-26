@@ -39,6 +39,9 @@ def mock_config():
     config.max_workers = 3
     config.request_timeout = 30
     config.provider = "openai"
+    config.generate_html = True
+    config.embed_images_in_html = False
+    config.open_in_browser = False
     return config
 
 
@@ -50,17 +53,19 @@ def mock_price_data():
     base_price = 150
     prices = base_price + np.cumsum(np.random.randn(100) * 2)
 
-    return pd.DataFrame(
+    # yfinance returns data with Date as index
+    df = pd.DataFrame(
         {
-            "Date": dates,
             "Close": prices,
             "Open": prices * 0.99,
             "High": prices * 1.01,
             "Low": prices * 0.98,
             "Volume": np.random.randint(1000000, 10000000, 100),
-            "ticker": "AAPL",
-        }
+        },
+        index=dates
     )
+    df.index.name = "Date"
+    return df
 
 
 @pytest.fixture
@@ -205,16 +210,20 @@ class TestAnalyzeTicker:
 class TestGenerateReport:
     """Test full report generation."""
 
+    @patch("builtins.print")  # Suppress print to avoid Unicode errors in tests
     @patch("fetcher.yf.Ticker")
     @patch("orchestrator.IntegratedLLMInterface")
     @patch("orchestrator.CacheManager")
     @patch("orchestrator.ThreadSafeChartGenerator")
+    @patch("orchestrator.HTMLGenerator")
     def test_generate_report_ticker_mode(
         self,
+        mock_html_gen,
         mock_chart,
         mock_cache,
         mock_llm,
         mock_yf,
+        mock_print,
         mock_config,
         mock_price_data,
         mock_ticker_info,
@@ -223,13 +232,17 @@ class TestGenerateReport:
         temp_output_dir,
     ):
         """Test report generation in ticker mode."""
-        # Setup mocks
-        mock_ticker_obj = Mock()
-        mock_ticker_obj.history.return_value = mock_price_data.copy()
-        mock_ticker_obj.info = mock_ticker_info
-        mock_ticker_obj.income_stmt = mock_income_stmt
-        mock_ticker_obj.cashflow = mock_cashflow
-        mock_yf.return_value = mock_ticker_obj
+        # Setup mocks - use side_effect to return different mock for each ticker
+        def create_mock_ticker(ticker_symbol, **kwargs):  # Accept any kwargs
+            mock_obj = Mock()
+            # Mock history to be a Mock that returns data when called
+            mock_obj.history.return_value = mock_price_data.copy()
+            mock_obj.info = mock_ticker_info if ticker_symbol == "AAPL" else {"trailingPE": 20.0}
+            mock_obj.income_stmt = mock_income_stmt if ticker_symbol == "AAPL" else pd.DataFrame({"TotalRevenue": [100e9] * 5})
+            mock_obj.cashflow = mock_cashflow if ticker_symbol == "AAPL" else pd.DataFrame({"FreeCashFlow": [20e9] * 5})
+            return mock_obj
+
+        mock_yf.side_effect = create_mock_ticker
 
         mock_cache_instance = Mock()
         mock_cache_instance.get.return_value = None
@@ -239,6 +252,10 @@ class TestGenerateReport:
         mock_llm_instance.generate_detailed_report.return_value = "# Test Report\n\nThis is a test report."
         mock_llm_instance.review_report.return_value = ([], 8.5, {"quality_score": 8.5, "issues": [], "suggestions": []})
         mock_llm.return_value = mock_llm_instance
+
+        mock_html_gen_instance = Mock()
+        mock_html_gen_instance.generate_html_report.return_value = Path(temp_output_dir) / "test_report.html"
+        mock_html_gen.return_value = mock_html_gen_instance
 
         orchestrator = FinancialReportOrchestrator(mock_config)
         orchestrator.fetcher.cache = mock_cache_instance
@@ -255,16 +272,20 @@ class TestGenerateReport:
         assert Path(report_metadata.final_markdown_path).exists()
         assert Path(report_metadata.final_markdown_path).suffix == ".md"
 
+    @patch("builtins.print")  # Suppress print to avoid Unicode errors in tests
     @patch("fetcher.yf.Ticker")
     @patch("orchestrator.IntegratedLLMInterface")
     @patch("orchestrator.CacheManager")
     @patch("orchestrator.ThreadSafeChartGenerator")
+    @patch("orchestrator.HTMLGenerator")
     def test_generate_report_portfolio_mode(
         self,
+        mock_html_gen,
         mock_chart,
         mock_cache,
         mock_llm,
         mock_yf,
+        mock_print,
         mock_config,
         mock_price_data,
         temp_output_dir,
@@ -272,17 +293,16 @@ class TestGenerateReport:
         """Test report generation in portfolio mode with weights."""
 
         # Setup mocks for multiple tickers
-        def create_ticker_mock(ticker_symbol):
+        def create_ticker_mock(ticker_symbol, **kwargs):  # Accept any kwargs
             mock_obj = Mock()
-            data = mock_price_data.copy()
-            data["ticker"] = ticker_symbol
-            mock_obj.history.return_value = data
+            # Mock history to return data when called
+            mock_obj.history.return_value = mock_price_data.copy()
             mock_obj.info = {"trailingPE": 20.0, "beta": 1.0}
             mock_obj.income_stmt = pd.DataFrame({"TotalRevenue": [100e9] * 5})
             mock_obj.cashflow = pd.DataFrame({"FreeCashFlow": [20e9] * 5})
             return mock_obj
 
-        mock_yf.side_effect = lambda t: create_ticker_mock(t)
+        mock_yf.side_effect = create_ticker_mock
 
         mock_cache_instance = Mock()
         mock_cache_instance.get.return_value = None
@@ -292,6 +312,10 @@ class TestGenerateReport:
         mock_llm_instance.generate_detailed_report.return_value = "# Portfolio Report\n\nPortfolio analysis."
         mock_llm_instance.review_report.return_value = ([], 8.5, {"quality_score": 8.5, "issues": [], "suggestions": []})
         mock_llm.return_value = mock_llm_instance
+
+        mock_html_gen_instance = Mock()
+        mock_html_gen_instance.generate_html_report.return_value = Path(temp_output_dir) / "test_report.html"
+        mock_html_gen.return_value = mock_html_gen_instance
 
         orchestrator = FinancialReportOrchestrator(mock_config)
         orchestrator.fetcher.cache = mock_cache_instance
@@ -334,9 +358,8 @@ class TestAnalyzeAllTickers:
         # Setup mocks
         def create_ticker_mock(ticker_symbol):
             mock_obj = Mock()
-            data = mock_price_data.copy()
-            data["ticker"] = ticker_symbol
-            mock_obj.history.return_value = data
+            # Don't add ticker column - it's added by the fetcher
+            mock_obj.history.return_value = mock_price_data.copy()
             mock_obj.info = {"trailingPE": 20.0}
             mock_obj.income_stmt = pd.DataFrame({"TotalRevenue": [100e9] * 5})
             mock_obj.cashflow = pd.DataFrame({"FreeCashFlow": [20e9] * 5})
@@ -386,9 +409,9 @@ class TestPortfolioMetrics:
         def create_ticker_mock(ticker_symbol):
             mock_obj = Mock()
             data = mock_price_data.copy()
-            data["ticker"] = ticker_symbol
             # Vary prices slightly for each ticker
             data["Close"] = data["Close"] * (1 + np.random.rand() * 0.1)
+            # Don't add ticker column - it's added by the fetcher
             mock_obj.history.return_value = data
             mock_obj.info = {"trailingPE": 20.0}
             mock_obj.income_stmt = pd.DataFrame({"TotalRevenue": [100e9] * 5})
@@ -517,7 +540,7 @@ class TestAnalyzeAllTickersExtended:
         orchestrator = FinancialReportOrchestrator(mock_config)
 
         # Mock analyze_ticker to succeed for some and fail for others
-        def side_effect(ticker, period, output_dir, benchmark_returns):
+        def side_effect(ticker, period, output_dir, benchmark_returns, include_options=False, options_expirations=3):
             if ticker == "FAIL":
                 raise Exception("Simulated analysis failure")
             else:

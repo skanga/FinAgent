@@ -5,9 +5,11 @@ Caching system with TTL management.
 import time
 import hashlib
 import logging
+import pickle
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Any
+from threading import Lock
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,7 @@ class CacheManager:
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_seconds = ttl_hours * 3600
+        self._lock = Lock()  # Thread-safe access to cache files
         logger.debug(f"Cache initialized: {self.cache_dir} (TTL: {ttl_hours}h)")
 
     def _is_safe_subpath(self, path: Path, parent: Path) -> bool:
@@ -61,7 +64,7 @@ class CacheManager:
             return False
 
     def _get_cache_key(self, ticker: str, period: str, data_type: str) -> str:
-        """
+        r"""
         Generate secure cache key that cannot contain path separators.
 
         Uses MD5 hash to ensure the key is always a safe filename with no
@@ -112,13 +115,13 @@ class CacheManager:
 
         # Extra paranoia: ensure no path separators
         # (This should never trigger with proper MD5 hash, but defense in depth)
-        forbidden_chars = {"/", "\\", "..", "~", ":"}
+        forbidden_chars = {"/", "\\\\", "..", "~", ":"}
         if any(char in cache_key for char in forbidden_chars):
             raise ValueError(
                 f"Cache key contains forbidden path characters: {cache_key}"
             )
 
-    def _get_cache_path(self, cache_key: str) -> Path:
+    def _get_cache_path(self, cache_key: str, use_pickle: bool = False) -> Path:
         """
         Get cache file path with comprehensive path traversal protection.
 
@@ -130,6 +133,7 @@ class CacheManager:
 
         Args:
             cache_key: Pre-validated MD5 hash from _get_cache_key()
+            use_pickle: If True, use .pkl extension; otherwise use .parquet
 
         Returns:
             Safe path within cache directory
@@ -142,7 +146,8 @@ class CacheManager:
 
         # STEP 2: Construct path using only validated key
         # Since cache_key is validated MD5 hash, this is safe
-        filename = f"{cache_key}.parquet"
+        extension = ".pkl" if use_pickle else ".parquet"
+        filename = f"{cache_key}{extension}"
         cache_path = self.cache_dir / filename
 
         # STEP 3: Resolve to absolute path
@@ -165,6 +170,8 @@ class CacheManager:
         """
         Retrieves data from the cache if it exists and is not expired.
 
+        Thread-safe: Uses a lock to prevent concurrent access to the same cache file.
+
         Args:
             ticker (str): The ticker symbol.
             period (str): The time period for the data.
@@ -173,33 +180,57 @@ class CacheManager:
         Returns:
             Optional[Any]: The cached data, or None if it doesn't exist or is expired.
         """
-        cache_key = self._get_cache_key(ticker, period, data_type)
-        cache_path = self._get_cache_path(cache_key)
+        with self._lock:
+            cache_key = self._get_cache_key(ticker, period, data_type)
 
-        if not cache_path.exists():
-            return None
+            # Try pickle first (for non-DataFrame objects like OptionsChain)
+            cache_path_pkl = self._get_cache_path(cache_key, use_pickle=True)
+            if cache_path_pkl.exists():
+                cache_age_seconds = time.time() - cache_path_pkl.stat().st_mtime
+                if cache_age_seconds > self.ttl_seconds:
+                    logger.debug(f"Cache expired for {ticker} ({data_type})")
+                    cache_path_pkl.unlink()
+                else:
+                    try:
+                        with cache_path_pkl.open('rb') as f:
+                            data = pickle.load(f)
+                        logger.debug(
+                            f"Cache hit (pickle): {ticker} ({data_type}), age: {cache_age_seconds/3600:.1f}h"
+                        )
+                        return data
+                    except (OSError, pickle.PickleError, ValueError) as e:
+                        logger.debug(f"Pickle cache read failed for {ticker}: {e}")
+                        try:
+                            cache_path_pkl.unlink()
+                        except OSError:
+                            pass
 
-        cache_age_seconds = time.time() - cache_path.stat().st_mtime
-        if cache_age_seconds > self.ttl_seconds:
-            logger.debug(f"Cache expired for {ticker} ({data_type})")
-            cache_path.unlink()
-            return None
+            # Try parquet (for DataFrame objects)
+            cache_path_parquet = self._get_cache_path(cache_key, use_pickle=False)
+            if not cache_path_parquet.exists():
+                return None
 
-        try:
-            # Use parquet format for secure, efficient DataFrame storage
-            data = pd.read_parquet(cache_path)
-            logger.debug(
-                f"Cache hit: {ticker} ({data_type}), age: {cache_age_seconds/3600:.1f}h"
-            )
-            return data
-        except (OSError, pd.errors.ParserError, ValueError) as e:
-            logger.debug(f"Cache read failed for {ticker}: {e}")
-            # Remove corrupted cache file
+            cache_age_seconds = time.time() - cache_path_parquet.stat().st_mtime
+            if cache_age_seconds > self.ttl_seconds:
+                logger.debug(f"Cache expired for {ticker} ({data_type})")
+                cache_path_parquet.unlink()
+                return None
+
             try:
-                cache_path.unlink()
-            except OSError:
-                pass
-            return None
+                # Use parquet format for secure, efficient DataFrame storage
+                data = pd.read_parquet(cache_path_parquet)
+                logger.debug(
+                    f"Cache hit (parquet): {ticker} ({data_type}), age: {cache_age_seconds/3600:.1f}h"
+                )
+                return data
+            except (OSError, pd.errors.ParserError, ValueError) as e:
+                logger.debug(f"Parquet cache read failed for {ticker}: {e}")
+                # Remove corrupted cache file
+                try:
+                    cache_path_parquet.unlink()
+                except OSError:
+                    pass
+                return None
 
     def set(
         self, ticker: str, period: str, data: Any, data_type: str = "prices"
@@ -207,45 +238,55 @@ class CacheManager:
         """
         Stores data in the cache.
 
+        Thread-safe: Uses a lock to prevent concurrent writes to the same cache file.
+
+        Automatically chooses the appropriate storage format:
+        - Parquet for pandas DataFrames (efficient columnar storage)
+        - Pickle for other Python objects (lists, custom dataclasses, etc.)
+
         Args:
             ticker (str): The ticker symbol.
             period (str): The time period for the data.
             data (Any): The data to store.
             data_type (str): The type of data to store.
         """
-        cache_key = self._get_cache_key(ticker, period, data_type)
-        cache_path = self._get_cache_path(cache_key)
+        with self._lock:
+            cache_key = self._get_cache_key(ticker, period, data_type)
 
-        try:
-            # Validate that data is a pandas DataFrame
-            if not isinstance(data, pd.DataFrame):
-                logger.error(
-                    f"Cache only supports pandas DataFrames, got {type(data).__name__}"
-                )
-                return
-
-            # Use parquet format for secure, efficient DataFrame storage
-            data.to_parquet(cache_path, compression="snappy", index=False)
-            logger.debug(f"Cached {ticker} ({data_type})")
-        except (OSError, ValueError, TypeError) as e:
-            logger.debug(f"Cache write failed for {ticker}: {e}")
+            try:
+                if isinstance(data, pd.DataFrame):
+                    # Use parquet format for DataFrames (efficient columnar storage)
+                    cache_path = self._get_cache_path(cache_key, use_pickle=False)
+                    data.to_parquet(cache_path, compression="snappy", index=False)
+                    logger.debug(f"Cached {ticker} ({data_type}) as parquet")
+                else:
+                    # Use pickle for non-DataFrame objects (lists, OptionsChain, etc.)
+                    cache_path = self._get_cache_path(cache_key, use_pickle=True)
+                    with cache_path.open('wb') as f:
+                        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    logger.debug(f"Cached {ticker} ({data_type}) as pickle")
+            except (OSError, ValueError, TypeError, pickle.PickleError) as e:
+                logger.debug(f"Cache write failed for {ticker}: {e}")
 
     def clear_expired(self) -> int:
         """
-        Clears all expired cache entries.
+        Clears all expired cache entries (both parquet and pickle files).
 
         Returns:
             int: The number of cleared entries.
         """
         cleared = 0
-        for cache_file in self.cache_dir.glob("*.parquet"):
-            try:
-                cache_age = time.time() - cache_file.stat().st_mtime
-                if cache_age > self.ttl_seconds:
-                    cache_file.unlink()
-                    cleared += 1
-            except OSError as e:
-                logger.debug(f"Failed to clear cache file {cache_file}: {e}")
+
+        # Clear both parquet and pickle files
+        for pattern in ["*.parquet", "*.pkl"]:
+            for cache_file in self.cache_dir.glob(pattern):
+                try:
+                    cache_age = time.time() - cache_file.stat().st_mtime
+                    if cache_age > self.ttl_seconds:
+                        cache_file.unlink()
+                        cleared += 1
+                except OSError as e:
+                    logger.debug(f"Failed to clear cache file {cache_file}: {e}")
 
         if cleared > 0:
             logger.debug(f"Cleared {cleared} expired cache entries")

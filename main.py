@@ -5,6 +5,7 @@ CLI entry point for the financial reporting agent.
 import sys
 import logging
 import argparse
+import webbrowser
 from typing import List, Optional, Dict
 
 # Fix Windows console encoding for Unicode characters
@@ -111,6 +112,40 @@ Examples:
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
 
+    parser.add_argument(
+        "--no-html",
+        action="store_true",
+        help="Disable HTML report generation (only generate markdown)",
+    )
+
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't open HTML report in browser automatically",
+    )
+
+    parser.add_argument(
+        "--embed-images",
+        action="store_true",
+        help="Embed images as base64 in HTML (creates larger single-file report)",
+    )
+
+    # Options analysis arguments
+    parser.add_argument(
+        "--options",
+        "--with-options",
+        action="store_true",
+        help="Include options analysis in the report (Greeks, strategies, IV analysis)",
+    )
+
+    parser.add_argument(
+        "--options-expirations",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Number of options expirations to analyze (default: 3, max: 10)",
+    )
+
     return parser
 
 
@@ -169,6 +204,14 @@ def main() -> int:
         # Load and validate config
         config = Config.from_env()
 
+        # Override HTML settings from CLI flags
+        if args.no_html:
+            config.generate_html = False
+        if args.no_browser:
+            config.open_in_browser = False
+        if args.embed_images:
+            config.embed_images_in_html = True
+
         # Clear cache if requested
         if args.clear_cache:
             from cache import CacheManager
@@ -204,7 +247,9 @@ def main() -> int:
                 portfolio_request = PortfolioRequest(
                     tickers=tickers,
                     period=args.period,
-                    weights=weights
+                    weights=weights,
+                    include_options=args.options,
+                    options_expirations=min(args.options_expirations, 10)  # Cap at 10
                 )
             except ValidationError as e:
                 # Extract user-friendly error messages from Pydantic
@@ -219,6 +264,8 @@ def main() -> int:
             print(f"⏰ Period: {portfolio_request.period}")
             if portfolio_request.weights:
                 print(f"⚖️  Weights: {portfolio_request.weights}")
+            if portfolio_request.include_options:
+                print(f"📈 Options: ENABLED ({portfolio_request.options_expirations} expirations)")
             print("=" * 60)
 
             result = orchestrator.run(portfolio_request, args.output)
@@ -229,7 +276,9 @@ def main() -> int:
                 portfolio_request = PortfolioRequest(
                     tickers=["AAPL", "MSFT", "GOOGL"],
                     period=args.period,
-                    weights=None
+                    weights=None,
+                    include_options=args.options,
+                    options_expirations=min(args.options_expirations, 10)
                 )
             except ValidationError as e:
                 # Extract user-friendly error messages
@@ -242,18 +291,39 @@ def main() -> int:
 
             print("📊 Using default tickers: AAPL, MSFT, GOOGL")
             print(f"⏰ Period: {portfolio_request.period}")
+            if portfolio_request.include_options:
+                print(f"📈 Options: ENABLED ({portfolio_request.options_expirations} expirations)")
             print("=" * 60)
             result = orchestrator.run(portfolio_request, args.output)
+
+        # Open HTML in browser if enabled (with user confirmation for security)
+        browser_opened = False
+        if result.final_html_path and config.open_in_browser:
+            try:
+                # Prompt for confirmation before opening browser (security best practice)
+                response = input(f"Open report in browser? ({result.final_html_path}) [Y/n]: ").strip()
+                # Default to 'yes' if user just presses Enter (empty response)
+                if response == '' or response.lower() in ('y', 'yes'):
+                    # Convert to file:// URL for proper browser handling
+                    file_url = result.final_html_path.as_uri()
+                    webbrowser.open(file_url, new=2)  # new=2 opens in new tab if possible
+                    browser_opened = True
+            except Exception as e:
+                logger.warning(f"Failed to open browser: {e}")
 
         # Print summary
         print("\n" + "=" * 60)
         print("REPORT GENERATION COMPLETE")
         print("=" * 60)
-        print(f"📄 Report: {result.final_markdown_path}")
-        print(f"⏱️ Time: {result.performance_metrics['execution_time_seconds']}s")
+        print(f"📄 Markdown: {result.final_markdown_path}")
+        if result.final_html_path:
+            print(f"🌐 HTML: {result.final_html_path}")
+            if browser_opened:
+                print("   ✓ Opened in browser")
+        print(f"⏱️  Time: {result.performance_metrics['execution_time_seconds']}s")
         print(f"✅ Successful: {result.performance_metrics['successful']}")
         print(f"❌ Failed: {result.performance_metrics['failed']}")
-        print(f"🖼️ Charts: {result.performance_metrics['charts_generated']}")
+        print(f"🖼️  Charts: {result.performance_metrics['charts_generated']}")
         print(f"⭐ Quality: {result.performance_metrics['quality_score']}/10")
 
         if result.portfolio_metrics:

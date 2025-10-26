@@ -21,5 +21,8 @@ matplotlib>=3.10.5
 # Environment configuration
 python-dotenv>=1.1.1
 
+# Markdown to HTML
+mistune>=3.1.4
+
 # Type checking (optional, for development)
 # mypy>=1.0.0

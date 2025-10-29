@@ -897,7 +897,7 @@ Contributions are welcome! This project values:
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/yourusername/financial_reporting_agent.git
+git clone https://github.com/skanga/financial_reporting_agent.git
 cd financial_reporting_agent
 
 # 2. Create virtual environment
@@ -998,7 +998,7 @@ SOFTWARE.
 - [x] Chart embedding in reports (markdown + HTML)
 - [x] Auto-launch reports in browser
 - [x] Responsive design for mobile/tablet/desktop
-- [x] **Options Analytics** (Greeks, IV, strategies, P&L modeling, portfolio hedging)
+- [x] Options Analytics (Greeks, IV, strategies, P&L modeling, portfolio hedging)
 - [x] Dual-format caching (Parquet + Pickle)
 - [x] Stochastic oscillator indicator
 - [x] LLM quality review system
